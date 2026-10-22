@@ -241,3 +241,22 @@ describe("net APR (trading PnL, fees included)", () => {
     expect(poolWindowDailyFees(data)).toBeCloseTo(3);
   });
 });
+
+describe("axis ticks and APR formatting", () => {
+  it("picks a consistent nice tick step", async () => {
+    const { tickStep } = await import("@/lib/calc");
+    expect(tickStep(20, 30)).toBe(1); // every bin fits
+    expect(tickStep(45, 30)).toBe(2);
+    expect(tickStep(61, 20)).toBe(5);
+    expect(tickStep(160, 10)).toBe(20);
+    expect(tickStep(10, 0)).toBe(10);
+  });
+
+  it("formats net APR with 2 decimals and thousands separators", async () => {
+    const { fmtAprFixed } = await import("@/lib/calc");
+    expect(fmtAprFixed(10.99)).toBe("1,099.00%");
+    expect(fmtAprFixed(-3.9586)).toBe("-395.86%");
+    expect(fmtAprFixed(0.05)).toBe("5.00%");
+    expect(fmtAprFixed(null)).toBe("—");
+  });
+});

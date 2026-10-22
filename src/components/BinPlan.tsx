@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { fmtAmount, fmtApr, fmtBinPct, fmtUsd, planText, type BinData, type Estimate } from "@/lib/calc";
+import { fmtAmount, fmtApr, fmtAprFixed, fmtBinPct, fmtUsd, planText, type BinData, type Estimate } from "@/lib/calc";
 import type { Pool } from "@/lib/types";
 
 interface Props {
@@ -100,7 +100,9 @@ export default function BinPlan({ pool, data, from, to, estimate }: Props) {
                   <td className="px-1.5 py-1.5 text-right">{(p.share * 100).toFixed(2)}%</td>
                   <td className="px-1.5 py-1.5 text-right">{fmtUsd(p.dailyFees)}</td>
                   <td className="px-1.5 py-1.5 text-right text-accent">{fmtApr(p.apr)}</td>
-                  <td className={`px-1.5 py-1.5 text-right ${p.netApr !== null && p.netApr < 0 ? "text-bad" : ""}`}>{fmtApr(p.netApr)}</td>
+                  <td className={`px-1.5 py-1.5 text-right ${p.netApr === null || p.netApr === 0 ? "" : p.netApr < 0 ? "text-bad" : "text-accent"}`}>
+                    {fmtAprFixed(p.netApr)}
+                  </td>
                 </tr>
               );
             })}

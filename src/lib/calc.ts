@@ -451,3 +451,19 @@ export function chartWindow(data: BinData, from: number, to: number, maxBars = 1
   }
   return { lo, hi };
 }
+
+/** Smallest "nice" step (1, 2, 5, 10, 20, 50, …) so that `count` bins get at most `maxLabels` axis labels. */
+export function tickStep(count: number, maxLabels: number): number {
+  const limit = Math.max(1, Math.floor(maxLabels));
+  for (let mag = 1; ; mag *= 10) {
+    for (const m of [1, 2, 5]) {
+      if (Math.ceil(count / (m * mag)) <= limit) return m * mag;
+    }
+  }
+}
+
+/** APR with exactly 2 decimals and thousands separators, e.g. 10.99 → "1,099.00%". */
+export function fmtAprFixed(fraction: number | null): string {
+  if (fraction === null || !Number.isFinite(fraction)) return "—";
+  return `${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(fraction * 100)}%`;
+}

@@ -221,6 +221,7 @@ function WindowHint({ days, period }: { days: number; period: Period }) {
 }
 
 const NOMINAL_DAYS: Record<Period, number> = { "24h": 1, "7d": 7, "30d": 30 };
+const NET_NOTE = "Net is based on a short window and is very volatile per bin. Use 30d for a steadier view.";
 
 function FeeSummary({
   estimate,
@@ -257,7 +258,13 @@ function FeeSummary({
         <Big label="Fees / day" value={fmtUsd(estimate.dailyFees)} />
         <Big label={`Fees · ${days}d`} value={fmtUsd(projectFees(estimate.dailyFees, estimate.deposit, days).simple)} />
         <Big label="Your est. APR" value={fmtApr(estimate.apr)} tone="text-accent" sub="fees only" />
-        <Big label="Est. NET APR" value={fmtApr(net)} tone={net === null ? "text-muted" : net < 0 ? "text-bad" : "text-text"} sub={netSub} />
+        <Big
+          label="Est. NET APR"
+          value={fmtApr(net)}
+          tone={net === null ? "text-muted" : net < 0 ? "text-bad" : "text-text"}
+          sub={netSub}
+          note={net === null ? undefined : NET_NOTE}
+        />
         <Big label="Pool 7d APR" value={fmtApr(poolApr)} sub={poolFeesSub} />
       </div>
       <div className="overflow-x-auto">
@@ -286,23 +293,33 @@ function FeeSummary({
               );
             })}
           </tbody>
+          {estimate.netDaily !== null && (
+            <tfoot>
+              <tr>
+                <td colSpan={4} className="pt-1.5 text-right text-[11px] text-muted">
+                  {NET_NOTE}
+                </td>
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
       <p className="text-xs text-muted">
         Assumes the {estimate.source === "bins" ? "per-bin volume and liquidity of the data window" : "pool's recent fees, shared pro-rata with TVL"}{" "}
-        continue unchanged and the price stays in your range. Fee figures exclude price moves; the net column replays each bin&apos;s historical
+        continue unchanged and the pool&apos;s deviation stays in your range (bins follow the oracle price). Fee figures exclude price moves; the net column replays each bin&apos;s historical
         trading PnL (fees + price moves) and is not compounded.
       </p>
     </div>
   );
 }
 
-function Big({ label, value, tone = "text-text", sub }: { label: string; value: string; tone?: string; sub?: string }) {
+function Big({ label, value, tone = "text-text", sub, note }: { label: string; value: string; tone?: string; sub?: string; note?: string }) {
   return (
     <div className="rounded-xl bg-panel-2 px-3 py-3">
       <div className="text-[11px] uppercase tracking-wider text-muted">{label}</div>
       <div className={`num mt-0.5 text-xl font-semibold sm:text-2xl ${tone}`}>{value}</div>
       {sub && <div className="mt-0.5 text-[11px] text-muted">{sub}</div>}
+      {note && <div className="mt-1 border-t border-line pt-1 text-[10px] leading-snug text-muted">{note}</div>}
     </div>
   );
 }

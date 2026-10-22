@@ -13,7 +13,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { binPoolApr, chartWindow, fmtApr, fmtBinPct, fmtUsd, getBin, type BinData, type Estimate } from "@/lib/calc";
+import { binPoolApr, chartWindow, tickStep, fmtApr, fmtBinPct, fmtUsd, getBin, type BinData, type Estimate } from "@/lib/calc";
 import { Segmented } from "./ui";
 
 type Overlay = "none" | "volume" | "apr";
@@ -39,6 +39,7 @@ interface Row {
 export default function Histogram({ data, from, to, estimate, onRange }: Props) {
   const [overlay, setOverlay] = useState<Overlay>("none");
   const [drag, setDrag] = useState<{ start: number; end: number } | null>(null);
+  const [width, setWidth] = useState(800);
 
   const rows = useMemo<Row[]>(() => {
     const { lo, hi } = chartWindow(data, from, to);
@@ -58,6 +59,9 @@ export default function Histogram({ data, from, to, estimate, onRange }: Props) 
     }
     return out;
   }, [data, from, to, estimate.positions]);
+
+  // Label every bin when it fits, otherwise every step-th bin (multiples of the step, so 0 is always labelled).
+  const step = tickStep(rows.length, (width - 60) / 30);
 
   const sel = drag ? { a: Math.min(drag.start, drag.end), b: Math.max(drag.start, drag.end) } : { a: from, b: to };
   const hasOracle = rows.some((r) => r.idx === 0);
@@ -93,10 +97,10 @@ export default function Histogram({ data, from, to, estimate, onRange }: Props) 
         </div>
       </div>
       <div className="h-72 w-full cursor-crosshair">
-        <ResponsiveContainer>
+        <ResponsiveContainer onResize={(w) => w > 0 && setWidth(w)}>
           <ComposedChart
             data={rows}
-            margin={{ top: 18, right: 4, bottom: 0, left: 4 }}
+            margin={{ top: 40, right: 4, bottom: 0, left: 4 }}
             barCategoryGap={1}
             onMouseDown={(e) => {
               const i = labelOf(e);
@@ -113,7 +117,14 @@ export default function Histogram({ data, from, to, estimate, onRange }: Props) 
             onMouseLeave={() => setDrag(null)}
           >
             <CartesianGrid vertical={false} stroke="#1c2433" />
-            <XAxis dataKey="idx" tick={{ fill: "#8592a8", fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#222b3b" }} minTickGap={16} />
+            <XAxis
+              dataKey="idx"
+              interval={0}
+              tick={{ fill: "#8592a8", fontSize: 11 }}
+              tickFormatter={(v: number) => (v % step === 0 ? String(v) : "")}
+              tickLine={false}
+              axisLine={{ stroke: "#222b3b" }}
+            />
             <YAxis
               yAxisId="liq"
               tick={{ fill: "#8592a8", fontSize: 11 }}
@@ -151,7 +162,7 @@ export default function Histogram({ data, from, to, estimate, onRange }: Props) 
                 position="start"
                 stroke="#e6ebf3"
                 strokeDasharray="3 3"
-                label={{ value: "oracle 0%", position: "top", fill: "#e6ebf3", fontSize: 11 }}
+                label={{ value: "oracle 0%", position: "top", offset: 6, fill: "#e6ebf3", fontSize: 11 }}
               />
             )}
             {hasActive && data.curBinIdx !== 0 && (
@@ -160,7 +171,7 @@ export default function Histogram({ data, from, to, estimate, onRange }: Props) 
                 x={data.curBinIdx}
                 stroke="#facc15"
                 strokeOpacity={0.6}
-                label={{ value: `active #${data.curBinIdx}`, position: "insideTopRight", fill: "#facc15", fontSize: 11 }}
+                label={{ value: `active #${data.curBinIdx}`, position: "top", offset: 22, fill: "#facc15", fontSize: 11 }}
               />
             )}
           </ComposedChart>
