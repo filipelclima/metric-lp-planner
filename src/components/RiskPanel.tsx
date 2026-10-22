@@ -27,7 +27,7 @@ export function RedTierBanner({ pool }: { pool: Pool }) {
 export default function RiskPanel({ pool }: { pool: Pool }) {
   const health = providerHealth(pool.priceProviderStatus);
   const feeApr = bpsToFraction(pool.aprBps7d);
-  const pnlApr = bpsToFraction(pool.tradingPnlAprBps7d);
+  const netApr = bpsToFraction(pool.tradingPnlAprBps7d);
   const cooldown = pool.priceProviderCooldown;
   const sl = pool.stopLoss;
 
@@ -84,20 +84,16 @@ export default function RiskPanel({ pool }: { pool: Pool }) {
             <span className="text-bad">Level {pool.pauseLevel}</span>
           </Row>
         )}
+        {/* Trading PnL already includes fees ("includes Edge"), so it is the net figure — never add the two. */}
         <div className="grid grid-cols-2 gap-2 pt-1">
-          <Stat label="7d fee APR" value={fmtApr(feeApr)} tone="text-accent" />
           <Stat
-            label="7d trading PnL APR"
-            value={fmtApr(pnlApr)}
-            tone={pnlApr === null ? "text-muted" : pnlApr < 0 ? "text-bad" : "text-good"}
+            label="Net 7d APR (fees + price moves)"
+            value={fmtApr(netApr)}
+            tone={netApr === null ? "text-muted" : netApr < 0 ? "text-bad" : "text-good"}
           />
+          <Stat label="Fee APR" value={fmtApr(feeApr)} tone="text-accent" />
         </div>
-        {feeApr !== null && pnlApr !== null && (
-          <p className="text-xs text-muted">
-            Fee APR + trading PnL APR ≈ <span className={feeApr + pnlApr < 0 ? "text-bad" : "text-text"}>{fmtApr(feeApr + pnlApr)}</span> over the
-            last 7 days.
-          </p>
-        )}
+        <p className="text-xs text-muted">Net = what LPs actually made after the pool&apos;s token mix changed. Fees alone overstate returns.</p>
       </dl>
       <p className="mt-4 rounded-lg border border-warn/30 bg-warn/10 px-3 py-2 text-xs text-warn">
         Fees ≠ profit. Price moves can outweigh earned fees; you can lose your deposit. Estimates use past data.

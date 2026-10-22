@@ -1,10 +1,9 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { bpsToFraction, fmtApr, fmtUsd } from "@/lib/calc";
-import { chainName } from "@/lib/normalize";
 import { CHAINS, type Pool } from "@/lib/types";
 import type { ApiState } from "@/lib/useApi";
-import { ErrorNote, Segmented, TierBadge, TokenLogo, inputCls } from "./ui";
+import { ChainBadge, ErrorNote, Segmented, TierBadge, TokenLogo, inputCls } from "./ui";
 
 interface Props {
   list: ApiState<{ pools: Pool[] }>;
@@ -48,13 +47,13 @@ export default function PoolPicker({ list, selected, onSelect, hasSelection }: P
         className="flex w-full items-center justify-between gap-3 rounded-xl border border-line bg-panel-2 px-3 py-2.5 text-left hover:border-accent/40"
       >
         {selected ? (
-          <span className="flex min-w-0 items-center gap-2">
+          <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             <span className="flex -space-x-1.5">
               <TokenLogo src={selected.token0.logoUrl} symbol={selected.token0.symbol} />
               <TokenLogo src={selected.token1.logoUrl} symbol={selected.token1.symbol} />
             </span>
-            <span className="truncate font-medium">{selected.pair}</span>
-            <span className="text-xs text-muted">{chainName(selected.chainId)}</span>
+            <span className="whitespace-nowrap font-medium">{selected.pair}</span>
+            <ChainBadge chainId={selected.chainId} />
             <TierBadge tier={selected.tier} isPrivate={selected.isPrivate} />
           </span>
         ) : (
@@ -64,7 +63,7 @@ export default function PoolPicker({ list, selected, onSelect, hasSelection }: P
       </button>
 
       {open && (
-        <div className={`${selected ? "absolute z-30 mt-2 shadow-2xl shadow-black/50 lg:w-[640px]" : "mt-2"} w-full rounded-xl border border-line bg-panel p-3`}>
+        <div className="absolute z-30 mt-2 w-full overflow-x-hidden rounded-xl border border-line bg-panel p-3 shadow-2xl shadow-black/50 lg:w-[680px]">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <input
               autoFocus
@@ -73,26 +72,28 @@ export default function PoolPicker({ list, selected, onSelect, hasSelection }: P
               placeholder="Search pair, token or address"
               className={inputCls}
             />
+            <div className="shrink-0">
             <Segmented
               size="sm"
               value={chain}
               onChange={setChain}
               options={[{ value: "all" as const, label: "All" }, ...Object.entries(CHAINS).map(([id, c]) => ({ value: Number(id), label: c.short, title: c.name }))]}
             />
+            </div>
           </div>
-          <div className="mt-2 max-h-80 overflow-y-auto">
+          <div className="mt-2 max-h-96 overflow-y-auto overflow-x-hidden">
             {list.error && <ErrorNote message={list.error} retryAfter={list.retryAfter} onRetry={list.retry} />}
             {list.loading && <p className="py-6 text-center text-sm text-muted">Loading pools…</p>}
             {!list.loading && !list.error && pools.length === 0 && <p className="py-6 text-center text-sm text-muted">No pools match.</p>}
             {pools.length > 0 && (
-              <table className="w-full text-sm">
+              <table className="w-full table-fixed text-sm">
                 <thead className="sticky top-0 bg-panel text-left text-[11px] uppercase tracking-wider text-muted">
                   <tr>
                     <th className="py-1.5 font-medium">Pair</th>
-                    <th className="hidden py-1.5 font-medium sm:table-cell">Chain</th>
-                    <th className="py-1.5 text-right font-medium">TVL</th>
-                    <th className="py-1.5 text-right font-medium">7d APR</th>
-                    <th className="py-1.5 text-right font-medium">Tier</th>
+                    <th className="hidden w-12 py-1.5 font-medium sm:table-cell">Chain</th>
+                    <th className="w-[4.5rem] py-1.5 text-right font-medium">TVL</th>
+                    <th className="w-[4.5rem] py-1.5 text-right font-medium">7d APR</th>
+                    <th className="hidden w-32 py-1.5 text-right font-medium sm:table-cell">Tier</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -107,19 +108,24 @@ export default function PoolPicker({ list, selected, onSelect, hasSelection }: P
                         selected?.poolAddress.toLowerCase() === p.poolAddress.toLowerCase() && selected.chainId === p.chainId ? "bg-accent/5" : ""
                       }`}
                     >
-                      <td className="py-2">
-                        <span className="flex items-center gap-2">
-                          <span className="flex -space-x-1.5">
+                      <td className="py-2 pr-2">
+                        <span className="flex min-w-0 items-center gap-2" title={p.pair}>
+                          <span className="hidden shrink-0 -space-x-1.5 sm:flex">
                             <TokenLogo src={p.token0.logoUrl} symbol={p.token0.symbol} />
                             <TokenLogo src={p.token1.logoUrl} symbol={p.token1.symbol} />
                           </span>
-                          <span className="font-medium">{p.pair}</span>
+                          <span className="truncate font-medium">{p.pair}</span>
+                          <span className="shrink-0 sm:hidden">
+                            <ChainBadge chainId={p.chainId} />
+                          </span>
                         </span>
                       </td>
-                      <td className="hidden py-2 text-muted sm:table-cell">{chainName(p.chainId)}</td>
+                      <td className="hidden py-2 sm:table-cell">
+                        <ChainBadge chainId={p.chainId} />
+                      </td>
                       <td className="num py-2 text-right">{fmtUsd(p.tvlFiat, { compact: true })}</td>
                       <td className="num py-2 text-right text-accent">{fmtApr(bpsToFraction(p.aprBps7d))}</td>
-                      <td className="py-2 text-right">
+                      <td className="hidden py-2 text-right sm:table-cell">
                         <TierBadge tier={p.tier} isPrivate={p.isPrivate} />
                       </td>
                     </tr>

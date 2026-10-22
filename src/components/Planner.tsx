@@ -9,8 +9,10 @@ import {
   fmtUsd,
   parseBins,
   poolDailyFees,
+  poolWindowDailyFees,
   presetRange,
   projectFees,
+  type BinData,
   type Estimate,
 } from "@/lib/calc";
 import type { Period, Pool, RawBinsResponse, Strategy } from "@/lib/types";
@@ -76,7 +78,7 @@ export default function Planner() {
   const selectPool = (p: Pool) => set({ chain: p.chainId, pool: p.poolAddress, range: { kind: "preset", share: 90 } });
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(320px,380px)_1fr]">
+    <div className="grid gap-5 lg:grid-cols-[minmax(360px,420px)_1fr]">
       <div className="space-y-5">
         <Panel title="1 · Pool">
           <PoolPicker list={list} selected={pool} onSelect={selectPool} hasSelection={!!s.pool} />
@@ -175,7 +177,7 @@ export default function Planner() {
               </div>
             )}
             {estimate ? (
-              <FeeSummary estimate={estimate} days={s.days} pool={pool} />
+              <FeeSummary estimate={estimate} days={s.days} pool={pool} binData={binData} period={s.period} />
             ) : (
               <p className="py-8 text-center text-sm text-muted">{bins.loading ? "Loading bin data…" : "Enter a deposit amount."}</p>
             )}
@@ -218,17 +220,45 @@ function WindowHint({ days, period }: { days: number; period: Period }) {
   );
 }
 
-function FeeSummary({ estimate, days, pool }: { estimate: Estimate; days: number; pool: Pool }) {
+const NOMINAL_DAYS: Record<Period, number> = { "24h": 1, "7d": 7, "30d": 30 };
+
+function FeeSummary({
+  estimate,
+  days,
+  pool,
+  binData,
+  period,
+}: {
+  estimate: Estimate;
+  days: number;
+  pool: Pool;
+  binData: BinData | null;
+  period: Period;
+}) {
   const durations = [...new Set([...PRESET_DAYS, days])].sort((a, b) => a - b);
   const poolApr = bpsToFraction(pool.aprBps7d);
-  const poolFees = poolDailyFees(pool);
+  // Pool fee subtitle follows the data actually used: the selected period's bins window, else analytics24h.
+  let poolFeesSub: string | undefined;
+  if (estimate.source === "bins" && binData) {
+    const short = binData.windowDays < NOMINAL_DAYS[period] * 0.97;
+    poolFeesSub = `${fmtUsd(poolWindowDailyFees(binData))} avg/day pool fees over ${short ? `${binData.windowDays.toFixed(1)}d (young pool)` : `the ${period} window`}`;
+  } else {
+    const p24 = poolDailyFees(pool);
+    if (p24) poolFeesSub = `${fmtUsd(p24.dailyFees)}/day pool fees (24h)`;
+  }
+  const net = estimate.netApr;
+  const netSub =
+    estimate.netApr === null
+      ? "no net data for this range"
+      : `historical, can be negative${estimate.netSkippedBins > 0 ? ` · ${estimate.netSkippedBins} bin${estimate.netSkippedBins === 1 ? "" : "s"} without data` : ""}`;
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
         <Big label="Fees / day" value={fmtUsd(estimate.dailyFees)} />
         <Big label={`Fees · ${days}d`} value={fmtUsd(projectFees(estimate.dailyFees, estimate.deposit, days).simple)} />
-        <Big label="Your est. APR" value={fmtApr(estimate.apr)} tone="text-accent" />
-        <Big label="Pool 7d APR" value={fmtApr(poolApr)} sub={poolFees ? `${fmtUsd(poolFees.dailyFees)}/day pool fees (24h)` : undefined} />
+        <Big label="Your est. APR" value={fmtApr(estimate.apr)} tone="text-accent" sub="fees only" />
+        <Big label="Est. NET APR" value={fmtApr(net)} tone={net === null ? "text-muted" : net < 0 ? "text-bad" : "text-text"} sub={netSub} />
+        <Big label="Pool 7d APR" value={fmtApr(poolApr)} sub={poolFeesSub} />
       </div>
       <div className="overflow-x-auto">
         <table className="num w-full text-sm">
@@ -237,11 +267,13 @@ function FeeSummary({ estimate, days, pool }: { estimate: Estimate; days: number
               <th className="py-1.5 font-medium">Duration</th>
               <th className="py-1.5 text-right font-medium">Fees (simple)</th>
               <th className="py-1.5 text-right font-medium">With auto-compounding</th>
+              <th className="py-1.5 text-right font-medium">Net (historical)</th>
             </tr>
           </thead>
           <tbody>
             {durations.map((d) => {
               const p = projectFees(estimate.dailyFees, estimate.deposit, d);
+              const n = estimate.netDaily === null ? null : estimate.netDaily * d;
               return (
                 <tr key={d} className={`border-t border-line/60 ${d === days ? "text-text" : "text-muted"}`}>
                   <td className="py-1.5">
@@ -249,6 +281,7 @@ function FeeSummary({ estimate, days, pool }: { estimate: Estimate; days: number
                   </td>
                   <td className="py-1.5 text-right">{fmtUsd(p.simple)}</td>
                   <td className="py-1.5 text-right">{fmtUsd(p.compounded)}</td>
+                  <td className={`py-1.5 text-right ${n !== null && n < 0 ? "text-bad" : ""}`}>{n === null ? "—" : fmtUsd(n)}</td>
                 </tr>
               );
             })}
@@ -257,7 +290,8 @@ function FeeSummary({ estimate, days, pool }: { estimate: Estimate; days: number
       </div>
       <p className="text-xs text-muted">
         Assumes the {estimate.source === "bins" ? "per-bin volume and liquidity of the data window" : "pool's recent fees, shared pro-rata with TVL"}{" "}
-        continue unchanged and the price stays in your range. Fees only — excludes price impact on your tokens.
+        continue unchanged and the price stays in your range. Fee figures exclude price moves; the net column replays each bin&apos;s historical
+        trading PnL (fees + price moves) and is not compounded.
       </p>
     </div>
   );

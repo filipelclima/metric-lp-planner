@@ -64,19 +64,22 @@ export default function BinPlan({ pool, data, from, to, estimate }: Props) {
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-line">
-        <table className="num w-full min-w-[760px] text-sm">
+        <table className="num w-full min-w-[720px] text-xs">
           <thead className="bg-panel-2 text-left text-[11px] uppercase tracking-wider text-muted">
             <tr>
-              <th className="px-2 py-2 font-medium">Bin</th>
-              <th className="px-2 py-2 font-medium">Low</th>
-              <th className="px-2 py-2 font-medium">Mid</th>
-              <th className="px-2 py-2 font-medium">High</th>
-              <th className="px-2 py-2 text-right font-medium">USD</th>
-              <th className="px-2 py-2 text-right font-medium">{pool.token0.symbol}</th>
-              <th className="px-2 py-2 text-right font-medium">{pool.token1.symbol}</th>
-              <th className="px-2 py-2 text-right font-medium">Your share</th>
-              <th className="px-2 py-2 text-right font-medium">Fees/day</th>
-              <th className="px-2 py-2 text-right font-medium">Bin APR</th>
+              <th className="px-1.5 py-2 font-medium">Bin</th>
+              <th className="px-1.5 py-2 font-medium">Low</th>
+              <th className="px-1.5 py-2 font-medium">Mid</th>
+              <th className="px-1.5 py-2 font-medium">High</th>
+              <th className="px-1.5 py-2 text-right font-medium">USD</th>
+              <th className="px-1.5 py-2 text-right font-medium">{pool.token0.symbol}</th>
+              <th className="px-1.5 py-2 text-right font-medium">{pool.token1.symbol}</th>
+              <th className="px-1.5 py-2 text-right font-medium">Your share</th>
+              <th className="px-1.5 py-2 text-right font-medium">Fees/day</th>
+              <th className="px-1.5 py-2 text-right font-medium">Bin APR</th>
+              <th className="px-1.5 py-2 text-right font-medium" title="Historical trading PnL APR (fees + price moves) on your capital in this bin">
+                Net APR
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -84,19 +87,20 @@ export default function BinPlan({ pool, data, from, to, estimate }: Props) {
               const active = p.bin.idx === data.curBinIdx;
               return (
                 <tr key={p.bin.idx} className={`border-t border-line/60 ${active ? "bg-warn/[0.06]" : ""}`}>
-                  <td className="px-2 py-1.5">
+                  <td className="px-1.5 py-1.5">
                     #{p.bin.idx}
                     {active && <span className="ml-1.5 rounded bg-warn/15 px-1 text-[10px] text-warn">active</span>}
                   </td>
-                  <td className="px-2 py-1.5 text-muted">{fmtBinPct(p.bin.lowPct)}</td>
-                  <td className="px-2 py-1.5">{fmtBinPct(p.bin.midPct)}</td>
-                  <td className="px-2 py-1.5 text-muted">{fmtBinPct(p.bin.highPct)}</td>
-                  <td className="px-2 py-1.5 text-right">{fmtUsd(p.usd)}</td>
-                  <td className="px-2 py-1.5 text-right">{p.token0Usd > 0 && pool.token0.fiatPrice ? fmtAmount(p.token0Amount, pool.token0.fiatPrice) : <span className="text-muted">—</span>}</td>
-                  <td className="px-2 py-1.5 text-right">{p.token1Usd > 0 && pool.token1.fiatPrice ? fmtAmount(p.token1Amount, pool.token1.fiatPrice) : <span className="text-muted">—</span>}</td>
-                  <td className="px-2 py-1.5 text-right">{(p.share * 100).toFixed(2)}%</td>
-                  <td className="px-2 py-1.5 text-right">{fmtUsd(p.dailyFees)}</td>
-                  <td className="px-2 py-1.5 text-right text-accent">{fmtApr(p.apr)}</td>
+                  <td className="px-1.5 py-1.5 text-muted">{fmtBinPct(p.bin.lowPct)}</td>
+                  <td className="px-1.5 py-1.5">{fmtBinPct(p.bin.midPct)}</td>
+                  <td className="px-1.5 py-1.5 text-muted">{fmtBinPct(p.bin.highPct)}</td>
+                  <td className="px-1.5 py-1.5 text-right">{fmtUsd(p.usd)}</td>
+                  <td className="px-1.5 py-1.5 text-right">{p.token0Usd > 0 && pool.token0.fiatPrice ? fmtAmount(p.token0Amount, pool.token0.fiatPrice) : <span className="text-muted">—</span>}</td>
+                  <td className="px-1.5 py-1.5 text-right">{p.token1Usd > 0 && pool.token1.fiatPrice ? fmtAmount(p.token1Amount, pool.token1.fiatPrice) : <span className="text-muted">—</span>}</td>
+                  <td className="px-1.5 py-1.5 text-right">{(p.share * 100).toFixed(2)}%</td>
+                  <td className="px-1.5 py-1.5 text-right">{fmtUsd(p.dailyFees)}</td>
+                  <td className="px-1.5 py-1.5 text-right text-accent">{fmtApr(p.apr)}</td>
+                  <td className={`px-1.5 py-1.5 text-right ${p.netApr !== null && p.netApr < 0 ? "text-bad" : ""}`}>{fmtApr(p.netApr)}</td>
                 </tr>
               );
             })}

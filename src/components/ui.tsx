@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { TIER_LABEL } from "@/lib/risk";
-import type { Tier } from "@/lib/types";
+import { CHAINS, type Tier } from "@/lib/types";
 
 export function Panel({ title, right, children, className = "" }: { title?: ReactNode; right?: ReactNode; children: ReactNode; className?: string }) {
   return (
@@ -109,5 +109,15 @@ export function ErrorNote({ message, onRetry, retryAfter }: { message: string; o
         </button>
       )}
     </div>
+  );
+}
+
+/** Short chain label (ETH / BNB / RH) with the full name as a tooltip. */
+export function ChainBadge({ chainId }: { chainId: number }) {
+  const c = CHAINS[chainId];
+  return (
+    <span title={c?.name ?? `Chain ${chainId}`} className="inline-flex rounded border border-line bg-panel-2 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-muted">
+      {c?.short ?? chainId}
+    </span>
   );
 }

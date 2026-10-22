@@ -7,7 +7,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { binPoolApr, getBin, parseBins, splitTokens } from "@/lib/calc";
+import { binPoolApr, estimateFromBins, getBin, parseBins, splitTokens } from "@/lib/calc";
 import { parseChains } from "@/lib/normalize";
 import type { RawBinsResponse, RawChainsResponse } from "@/lib/types";
 
@@ -77,5 +77,14 @@ describe("chains", () => {
     const m = parseChains(read<RawChainsResponse>("chains.json"));
     expect([...m.keys()]).toEqual([1, 56, 4663]);
     expect(m.get(56)).toBe("BSC");
+  });
+});
+
+describe("SKHYB/USDT 24h excerpt: net APR", () => {
+  const data = parseBins(read<RawBinsResponse>("56-0xee90641E7c3b4d6338Ab7f1c23Dfb979FAb5f096-24h-excerpt.bins.json"));
+  it("negative pnlAprBps yields a negative net estimate", () => {
+    const e = estimateFromBins(data, -2, -2, "uniform", 1, { token0: 1, token1: 1 });
+    expect(e.netApr).toBeCloseTo(-3.9586, 3);
+    expect(e.apr).toBeCloseTo(2.8904, 3);
   });
 });

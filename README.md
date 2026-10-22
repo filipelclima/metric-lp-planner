@@ -18,14 +18,15 @@ Think *Poolfish (uniswap.fish) for Metric*.
   - **Curve**: triangular weights peaking at the active bin.
   - **Fee-weighted**: proportional to each bin's daily fees divided by its liquidity.
 - Output:
-  - Fees per day, 30d, 60d, 90d and custom, with simple and auto-compounding lines.
+  - Fees per day, 30d, 60d, 90d and custom, with simple and auto-compounding lines, plus a historical net column.
+  - An estimated NET APR for your range from each bin's `pnlAprBps` (historical, can be negative).
   - Your APR next to the pool's APR.
   - A copyable **bin plan**, plus a per-bin table with edges, USD, token amounts, your share, fees per day and bin APR.
   - **Tokens needed**: bins below the active bin hold token1 only, bins above hold token0 only, and the active bin is split by its reserve ratio.
 - Histogram of pool liquidity per bin, with your range and your liquidity, an oracle (0%) marker, an active-bin marker, and a Volume/APR overlay.
 - Risk panel:
   - Tier with reason codes in plain English, price provider status, and whether the curator is verified.
-  - 7d fee APR next to 7d trading PnL APR.
+  - Net 7d APR (fees + price moves, from `tradingPnlAprBps7d`) next to the fee APR. Trading PnL already includes fees ("includes Edge"), so the two are never added.
   - A prominent warning for red-tier pools.
 - Shareable URL, e.g. `?chain=56&pool=0x..&amount=1000&days=30&from=-8&to=7&strategy=uniform&period=7d`. A `preset=80|90|95` parameter keeps an auto preset live.
 
@@ -75,6 +76,10 @@ Everything is in `src/lib/calc.ts`, as pure functions with tests in `tests/`.
   - `dailyFees_b = fees_b / windowDays`
 - **Your fees**: `userDaily = Σ_b dailyFees_b × U_b / (liq_b + U_b)`, where `U_b` is your USD in bin b.
 - **APR**: `userDaily × 365 / deposit`. Bin APR = `dailyFees_b × 365 / (liq_b + U_b)`.
+- **Net (historical)**: `pnlAprBps` is Metric's trading PnL APR per bin, which already includes fees.
+  - Per bin, `netDaily_b = (pnlAprBps_b / 10000) × liq_b / 365`.
+  - For your position, `userNet = Σ netDaily_b × U_b / (liq_b + U_b)` and `netAPR = userNet × 365 / deposit`.
+  - Bins with `pnlAprBps = null` are skipped (they count as 0, and the UI says how many were skipped). The net figure is simple, with no compounding, and can be negative.
 - **Compounding**: `r = userDaily / deposit`, `value = D × (1 + r)^days − D`.
 - **Sanity check**: as `U_b → 0`, `dailyFees_b × 365 / liq_b` should equal Metric's `aprBps / 10000`.
   - `tests/calc.test.ts` checks this on synthetic data.

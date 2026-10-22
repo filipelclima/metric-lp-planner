@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  binNetDaily,
   binPoolApr,
   estimateFromBins,
   estimateFromPool,
@@ -7,6 +8,7 @@ import {
   getBin,
   parseBins,
   planText,
+  poolWindowDailyFees,
   presetRange,
   projectFees,
   splitTokens,
@@ -183,5 +185,59 @@ describe("formatting", () => {
     expect(fmtAmount(812.4, 1)).toBe("812.40");
     expect(fmtAmount(6.123456, 132.7)).toBe("6.12346");
     expect(fmtAmount(0.0123456789, 60000)).toBe("0.0123457");
+  });
+});
+
+describe("net APR (trading PnL, fees included)", () => {
+  // bin -1: 36.5% net on $20k → +$20/day; bin 0: -73% net on $10k → -$20/day; bin 1: no pnl data.
+  const netRaw: RawBinsResponse = {
+    window: { fromTs: 0, toTs: 7 * 86400 },
+    curBinIdx: -1,
+    bins: [
+      bin(-1, 1000, 7, 20000, 7, { pnlAprBps: 3650 }),
+      bin(0, 1000, 7, 10000, 7, { pnlAprBps: -7300 }),
+      bin(1, 1000, 7, 10000, 7, { pnlAprBps: null }),
+    ],
+  };
+  const data = parseBins(netRaw);
+
+  it("pool-level net/day per bin = pnlAprBps/10000 × liq / 365", () => {
+    expect(binNetDaily(getBin(data, -1))).toBeCloseTo(20);
+    expect(binNetDaily(getBin(data, 0))).toBeCloseTo(-20);
+    expect(binNetDaily(getBin(data, 1))).toBe(0);
+  });
+
+  it("positive range: user share applied like fees", () => {
+    const e = estimateFromBins(data, -1, -1, "uniform", 1000, { token0: 1, token1: 1 });
+    expect(e.netDaily).toBeCloseTo(20 * (1000 / 21000), 10);
+    expect(e.netApr).toBeCloseTo((e.netDaily! * 365) / 1000, 10);
+    expect(e.netSkippedBins).toBe(0);
+    // tiny deposit → bin net APR approaches pnlAprBps / 10000
+    const tiny = estimateFromBins(data, -1, -1, "uniform", 1e-6, { token0: 1, token1: 1 });
+    expect(tiny.positions[0].netApr).toBeCloseTo(0.365, 6);
+  });
+
+  it("negative range: losses outweigh, null bins are skipped", () => {
+    const e = estimateFromBins(data, -1, 1, "uniform", 3000, { token0: 1, token1: 1 });
+    const expected = 20 * (1000 / 21000) - 20 * (1000 / 11000);
+    expect(e.netDaily).toBeCloseTo(expected, 10);
+    expect(e.netDaily!).toBeLessThan(0);
+    expect(e.netApr!).toBeLessThan(0);
+    expect(e.netApr).toBeCloseTo((expected * 365) / 3000, 10);
+    expect(e.netSkippedBins).toBe(1);
+    expect(e.positions[2].netApr).toBeNull();
+    expect(e.positions[1].netApr).toBeCloseTo(-0.73 * (10000 / 11000), 10);
+    // the fee estimate is unaffected and positive
+    expect(e.apr).toBeGreaterThan(0);
+  });
+
+  it("is null when no bin in range has pnl data, and for the pool-level fallback", () => {
+    expect(estimateFromBins(data, 1, 1, "uniform", 1000, { token0: 1, token1: 1 }).netApr).toBeNull();
+    const a24 = { fromTs: 0, toTs: 86400, feesFiat: 100, tvlFiat: 99000, volumeFiat: 0, aprBps: 0 };
+    expect(estimateFromPool({ analytics24h: a24 }, 1000)!.netApr).toBeNull();
+  });
+
+  it("pool avg fees/day over the window sums every bin", () => {
+    expect(poolWindowDailyFees(data)).toBeCloseTo(3);
   });
 });

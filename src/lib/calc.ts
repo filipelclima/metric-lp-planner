@@ -224,6 +224,10 @@ export interface BinPosition {
   dailyFees: number;
   /** APR the user earns on this bin's capital: dailyFees × 365 / (liq + U). */
   apr: number;
+  /** Historical net (fees + price moves) USD/day from pnlAprBps; null when the bin has no pnlAprBps. */
+  netDaily: number | null;
+  /** Net APR on this bin's capital: (pnlAprBps / 10000) × liq / (liq + U). Can be negative. */
+  netApr: number | null;
 }
 
 export interface Estimate {
@@ -231,6 +235,11 @@ export interface Estimate {
   deposit: number;
   dailyFees: number;
   apr: number;
+  /** Historical net USD/day (trading PnL, which already includes fees). Null without per-bin pnl data. */
+  netDaily: number | null;
+  netApr: number | null;
+  /** Bins in range skipped for the net estimate because pnlAprBps is null. */
+  netSkippedBins: number;
   positions: BinPosition[];
   token0Usd: number;
   token1Usd: number;
@@ -255,7 +264,19 @@ export function splitTokens(bin: Bin, usd: number, curBinIdx: number): { token0U
 
 const amount = (usd: number, price: number | null) => (price !== null && price > 0 ? usd / price : 0);
 
-/** Per-bin fee model: userDaily = Σ dailyFees_b × U_b / (liq_b + U_b). */
+/**
+ * Pool-level net USD/day of a bin from Metric's trading PnL APR, which already includes fees:
+ * netDaily_b = (pnlAprBps_b / 10000) × liq_b / 365. Zero when pnlAprBps is null.
+ */
+export function binNetDaily(b: Pick<Bin, "pnlAprBps" | "liquidity">): number {
+  return b.pnlAprBps === null ? 0 : ((b.pnlAprBps / 1e4) * b.liquidity) / 365;
+}
+
+/**
+ * Per-bin model, user share s_b = U_b / (liq_b + U_b):
+ *   fees: userDaily = Σ dailyFees_b × s_b
+ *   net:  userNet   = Σ netDaily_b × s_b over bins with pnlAprBps (historical, can be negative)
+ */
 export function estimateFromBins(
   data: BinData,
   from: number,
@@ -281,21 +302,33 @@ export function estimateFromBins(
       share,
       dailyFees: bin.dailyFees * share,
       apr: denom > 0 ? (bin.dailyFees * 365) / denom : 0,
+      netDaily: bin.pnlAprBps === null ? null : binNetDaily(bin) * share,
+      netApr: bin.pnlAprBps === null ? null : denom > 0 ? ((bin.pnlAprBps / 1e4) * bin.liquidity) / denom : 0,
     };
   });
   const sum = (f: (p: BinPosition) => number) => positions.reduce((a, p) => a + f(p), 0);
   const dailyFees = sum((p) => p.dailyFees);
+  const withNet = positions.filter((p) => p.netDaily !== null);
+  const netDaily = withNet.length > 0 ? withNet.reduce((a, p) => a + p.netDaily!, 0) : null;
   return {
     source: "bins",
     deposit,
     dailyFees,
     apr: deposit > 0 ? (dailyFees * 365) / deposit : 0,
+    netDaily,
+    netApr: netDaily === null || !(deposit > 0) ? null : (netDaily * 365) / deposit,
+    netSkippedBins: positions.length - withNet.length,
     positions,
     token0Usd: sum((p) => p.token0Usd),
     token1Usd: sum((p) => p.token1Usd),
     token0Amount: sum((p) => p.token0Amount),
     token1Amount: sum((p) => p.token1Amount),
   };
+}
+
+/** Whole pool's average LP fees per day over the bins response window. */
+export function poolWindowDailyFees(data: BinData): number {
+  return data.bins.reduce((a, b) => a + b.dailyFees, 0);
 }
 
 /** Pool-level daily LP fees and TVL from analytics24h (fees divided by that window's length). */
@@ -320,6 +353,9 @@ export function estimateFromPool(pool: Pick<Pool, "analytics24h">, deposit: numb
     deposit,
     dailyFees,
     apr: deposit > 0 ? (dailyFees * 365) / deposit : 0,
+    netDaily: null,
+    netApr: null,
+    netSkippedBins: 0,
     positions: [],
     token0Usd: 0,
     token1Usd: 0,
