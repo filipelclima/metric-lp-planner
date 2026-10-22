@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
+import { GeistMono } from "geist/font/mono";
+import { GeistSans } from "geist/font/sans";
 import Link from "next/link";
+import { Logo } from "@/components/Logo";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -9,21 +12,21 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <body className="min-h-screen antialiased">
-        <header className="mx-auto flex max-w-7xl items-center justify-between px-4 py-5 sm:px-6">
+        <header className="mx-auto flex h-14 max-w-[1400px] items-center justify-between px-4 sm:px-6">
           <Link href="/" className="flex items-center gap-2.5">
-            <Logo />
-            <span className="text-lg font-semibold tracking-tight">Binwise</span>
-            <span className="hidden text-sm text-muted sm:inline">· LP planner for Metric pools</span>
+            <Logo size={24} />
+            <span className="text-[15px] font-semibold tracking-tight">Binwise</span>
+            <span className="hidden text-sm text-faint sm:inline">LP planner for Metric pools</span>
           </Link>
-          <a href="https://docs.metric.xyz" target="_blank" rel="noreferrer" className="text-sm text-muted hover:text-text">
-            Metric docs ↗
+          <a href="https://docs.metric.xyz" target="_blank" rel="noreferrer" className="text-sm text-muted transition hover:text-text">
+            Docs ↗
           </a>
         </header>
-        <main className="mx-auto max-w-7xl px-4 pb-16 sm:px-6">{children}</main>
-        <footer className="border-t border-line">
-          <div className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-6 text-xs text-muted sm:flex-row sm:justify-between sm:px-6">
+        <main className="mx-auto max-w-[1400px] px-4 pb-24 sm:px-6 lg:pb-10">{children}</main>
+        <footer className="border-t border-line/60">
+          <div className="mx-auto flex max-w-[1400px] flex-col gap-1 px-4 py-5 text-xs text-faint sm:flex-row sm:justify-between sm:px-6">
             <p>Unofficial community tool, not affiliated with Metric. Not financial advice.</p>
             <p>
               Data: public Metric API ·{" "}
@@ -35,17 +38,5 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         </footer>
       </body>
     </html>
-  );
-}
-
-function Logo() {
-  // Five bars of rising/falling height: a tiny bin histogram.
-  return (
-    <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden>
-      <rect width="26" height="26" rx="7" fill="#161d2a" />
-      {[8, 13, 18, 12, 7].map((h, i) => (
-        <rect key={i} x={4 + i * 4} y={21 - h} width="2.6" height={h} rx="1" fill={i === 2 ? "#6ee7c5" : "#a78bfa"} opacity={i === 2 ? 1 : 0.75} />
-      ))}
-    </svg>
   );
 }

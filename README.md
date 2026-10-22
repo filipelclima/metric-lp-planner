@@ -28,6 +28,9 @@ Think *Poolfish (uniswap.fish) for Metric*.
   - Tier with reason codes in plain English, price provider status, and whether the curator is verified.
   - Net 7d APR (fees + price moves, from `tradingPnlAprBps7d`) next to the fee APR. Trading PnL already includes fees ("includes Edge"), so the two are never added.
   - A prominent warning for red-tier pools.
+- Results-first layout: a sticky config column (with distribution and data period under "Advanced"), a result hero (headline fees, fee vs net APR, projection chart, visual bin ruler with a copyable plan, tokens needed), the liquidity histogram, and a collapsible bin details table. Hovering a bar highlights its table row and vice versa. Risk details open in a side drawer from the status pills.
+- **Share card**: `/api/og` renders a 1200×630 PNG of the plan from the same URL params (Next.js `ImageResponse`). It's used as the page's OG/Twitter image, so shared links preview the result, and the Share menu offers Copy link, Download image and Post on X.
+- Motion: count-up numbers, staggered hero entrance, growing bars and an animated range overlay (framer-motion). All of it is disabled under `prefers-reduced-motion`.
 - Shareable URL, e.g. `?chain=56&pool=0x..&amount=1000&days=30&from=-8&to=7&strategy=uniform&period=7d`. A `preset=80|90|95` parameter keeps an auto preset live.
 
 ## Setup
@@ -95,6 +98,8 @@ src/lib/normalize.ts   API → Pool normalization (exact Metric response shapes,
 src/lib/num.ts         safe number / BigInt parsing
 src/lib/risk.ts        tier + reason-code copy
 src/lib/urlState.ts    shareable URL state
-src/app/api/**         proxy route handlers
-src/components/**      thin UI (Planner, PoolPicker, Histogram, BinPlan, RiskPanel)
+src/lib/plan.ts        URL state + API data → range and estimate (shared by the page and /api/og)
+src/lib/usePlanner.ts  client hook: URL sync, data fetching, derived estimate
+src/app/api/**         proxy route handlers + /api/og share image
+src/components/**      UI (Planner, ConfigPanel, Hero, Histogram, BinDetails, Risk, ShareMenu, PoolPicker)
 ```

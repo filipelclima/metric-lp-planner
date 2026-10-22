@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { bpsToFraction, fmtApr, fmtUsd } from "@/lib/calc";
 import { CHAINS, type Pool } from "@/lib/types";
 import type { ApiState } from "@/lib/useApi";
-import { ChainBadge, ErrorNote, Segmented, TierBadge, TokenLogo, inputCls } from "./ui";
+import { ChainBadge, ErrorNote, Segmented, Skeleton, TierBadge, TokenLogo, inputCls } from "./ui";
 
 interface Props {
   list: ApiState<{ pools: Pool[] }>;
@@ -14,7 +14,7 @@ interface Props {
 }
 
 export default function PoolPicker({ list, selected, onSelect, hasSelection }: Props) {
-  const [open, setOpen] = useState(!hasSelection);
+  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [chain, setChain] = useState<number | "all">("all");
   const ref = useRef<HTMLDivElement>(null);
@@ -44,7 +44,7 @@ export default function PoolPicker({ list, selected, onSelect, hasSelection }: P
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between gap-3 rounded-xl border border-line bg-panel-2 px-3 py-2.5 text-left hover:border-accent/40"
+        className="flex w-full items-center justify-between gap-3 rounded-xl bg-surface-2 px-3 py-2.5 text-left ring-1 ring-transparent transition hover:ring-accent/30"
       >
         {selected ? (
           <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
@@ -56,21 +56,23 @@ export default function PoolPicker({ list, selected, onSelect, hasSelection }: P
             <ChainBadge chainId={selected.chainId} />
             <TierBadge tier={selected.tier} isPrivate={selected.isPrivate} />
           </span>
+        ) : hasSelection ? (
+          <Skeleton className="h-5 w-44" />
         ) : (
-          <span className="text-muted">{hasSelection ? "Loading pool…" : "Select a pool…"}</span>
+          <span className="text-muted">Select a pool…</span>
         )}
-        <span className="text-muted">{open ? "▴" : "▾"}</span>
+        <span className="text-faint">{open ? "▴" : "▾"}</span>
       </button>
 
       {open && (
-        <div className="absolute z-30 mt-2 w-full overflow-x-hidden rounded-xl border border-line bg-panel p-3 shadow-2xl shadow-black/50 lg:w-[680px]">
+        <div className="absolute z-30 mt-2 w-full overflow-x-hidden rounded-xl bg-surface-3 p-3 shadow-2xl shadow-black/60 lg:w-[680px]">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <input
               autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search pair, token or address"
-              className={inputCls}
+              className={inputCls.replace(" num", "")}
             />
             <div className="shrink-0">
             <Segmented
@@ -83,11 +85,17 @@ export default function PoolPicker({ list, selected, onSelect, hasSelection }: P
           </div>
           <div className="mt-2 max-h-96 overflow-y-auto overflow-x-hidden">
             {list.error && <ErrorNote message={list.error} retryAfter={list.retryAfter} onRetry={list.retry} />}
-            {list.loading && <p className="py-6 text-center text-sm text-muted">Loading pools…</p>}
+            {list.loading && (
+              <div className="space-y-2 py-2">
+                {[0, 1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-7" />
+                ))}
+              </div>
+            )}
             {!list.loading && !list.error && pools.length === 0 && <p className="py-6 text-center text-sm text-muted">No pools match.</p>}
             {pools.length > 0 && (
               <table className="w-full table-fixed text-sm">
-                <thead className="sticky top-0 bg-panel text-left text-[11px] uppercase tracking-wider text-muted">
+                <thead className="sticky top-0 bg-surface-3 text-left text-[11px] uppercase tracking-wider text-muted">
                   <tr>
                     <th className="py-1.5 font-medium">Pair</th>
                     <th className="hidden w-12 py-1.5 font-medium sm:table-cell">Chain</th>
@@ -104,7 +112,7 @@ export default function PoolPicker({ list, selected, onSelect, hasSelection }: P
                         onSelect(p);
                         setOpen(false);
                       }}
-                      className={`cursor-pointer border-t border-line/60 hover:bg-panel-2 ${
+                      className={`cursor-pointer border-t border-line/50 hover:bg-surface-2 ${
                         selected?.poolAddress.toLowerCase() === p.poolAddress.toLowerCase() && selected.chainId === p.chainId ? "bg-accent/5" : ""
                       }`}
                     >
