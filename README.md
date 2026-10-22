@@ -58,7 +58,7 @@ Error handling:
 - Optional pool fields (`aprBps7d`, `tradingPnlAprBps7d`, `pauseLevel`, `curBinIdx`, `extensionDetails`, `tvlFiat`, `analytics24h`) are omitted when absent.
 - `token*FiatPrice` can be `null`. Token amounts for that token are then shown as unavailable.
 - `bin` and `swapCount` in the bins response are strings, and are parsed to numbers.
-- Tiers are `green` (Best Practices), `yellow` (Neutral), `red` (High Risk), `black` and `unclassified`. Red and black pools get a prominent warning, and pools with `depositWhitelistingEnabled` show "Private" instead of a tier.
+- Tiers are `green` (Best Practices), `yellow` (Neutral), `red` (High Risk), `black` (Delisted by Metric) and `unclassified`. Red and black pools get a prominent warning, and pools with `depositWhitelistingEnabled` show "Private" instead of a tier.
 - Very large integers such as `priceProviderCooldownSecs = 2^64−1` are parsed with BigInt, and anything ≥ 2^53 is shown as "never".
 
 Docs: <https://docs.metric.xyz/llms-full.txt>

@@ -27,7 +27,7 @@ export const TIER_LABEL: Record<Tier, string> = {
   green: "Best Practices",
   yellow: "Neutral",
   red: "High Risk",
-  black: "Black",
+  black: "Delisted by Metric",
   unclassified: "Unclassified",
 };
 

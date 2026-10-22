@@ -108,6 +108,7 @@ describe("risk copy", () => {
     expect(TIER_LABEL.green).toBe("Best Practices");
     expect(TIER_LABEL.yellow).toBe("Neutral");
     expect(TIER_LABEL.red).toBe("High Risk");
+    expect(TIER_LABEL.black).toBe("Delisted by Metric");
     expect(providerHealth("healthy")).toBe("ok");
     expect(providerHealth("pool_paused")).toBe("bad");
     expect(providerHealth("unknown")).toBe("unknown");

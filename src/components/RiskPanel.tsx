@@ -11,7 +11,7 @@ export function RedTierBanner({ pool }: { pool: Pool }) {
   if (pool.tier !== "red" && pool.tier !== "black") return null;
   return (
     <div role="alert" className="rounded-2xl border border-bad/40 bg-bad/10 px-4 py-3 text-sm text-bad">
-      <div className="font-semibold">⚠ Metric classifies this pool as {pool.tier === "red" ? "High Risk (red)" : "black"}.</div>
+      <div className="font-semibold">⚠ Metric classifies this pool as {pool.tier === "red" ? "High Risk (red)" : "Delisted by Metric (black)"}.</div>
       {pool.reasonCodes.length > 0 && (
         <ul className="mt-1 list-inside list-disc text-bad/90">
           {pool.reasonCodes.map((c) => (
