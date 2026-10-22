@@ -55,7 +55,7 @@ export default function PoolPicker({ list, selected, onSelect, hasSelection }: P
             </span>
             <span className="truncate font-medium">{selected.pair}</span>
             <span className="text-xs text-muted">{chainName(selected.chainId)}</span>
-            <TierBadge tier={selected.tier} />
+            <TierBadge tier={selected.tier} isPrivate={selected.isPrivate} />
           </span>
         ) : (
           <span className="text-muted">{hasSelection ? "Loading pool…" : "Select a pool…"}</span>
@@ -120,7 +120,7 @@ export default function PoolPicker({ list, selected, onSelect, hasSelection }: P
                       <td className="num py-2 text-right">{fmtUsd(p.tvlFiat, { compact: true })}</td>
                       <td className="num py-2 text-right text-accent">{fmtApr(bpsToFraction(p.aprBps7d))}</td>
                       <td className="py-2 text-right">
-                        <TierBadge tier={p.tier} />
+                        <TierBadge tier={p.tier} isPrivate={p.isPrivate} />
                       </td>
                     </tr>
                   ))}

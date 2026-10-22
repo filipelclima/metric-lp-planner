@@ -41,20 +41,7 @@ export default function Planner() {
   );
   const pool = meta.data?.pool ?? listed;
 
-  // Token prices come with the metadata; fetch them separately only when missing.
-  const p0 = useApi<{ price: number | null }>(pool && !(pool.token0.fiatPrice > 0) && pool.token0.address ? `/api/price/${pool.chainId}/${pool.token0.address}` : null);
-  const p1 = useApi<{ price: number | null }>(pool && !(pool.token1.fiatPrice > 0) && pool.token1.address ? `/api/price/${pool.chainId}/${pool.token1.address}` : null);
-  const prices = useMemo(
-    () => ({
-      token0: pool && pool.token0.fiatPrice > 0 ? pool.token0.fiatPrice : (p0.data?.price ?? 0),
-      token1: pool && pool.token1.fiatPrice > 0 ? pool.token1.fiatPrice : (p1.data?.price ?? 0),
-    }),
-    [pool, p0.data, p1.data],
-  );
-  const pricedPool = useMemo(
-    () => pool && { ...pool, token0: { ...pool.token0, fiatPrice: prices.token0 }, token1: { ...pool.token1, fiatPrice: prices.token1 } },
-    [pool, prices],
-  );
+  const prices = useMemo(() => ({ token0: pool?.token0.fiatPrice ?? null, token1: pool?.token1.fiatPrice ?? null }), [pool]);
 
   const binData = useMemo(() => {
     if (!bins.data) return null;
@@ -181,7 +168,7 @@ export default function Planner() {
             {bins.error && (
               <div className="mb-3">
                 <ErrorNote
-                  message={`Per-bin data unavailable: ${bins.error} Showing a pool-level estimate.`}
+                  message={`Per-bin data unavailable: ${bins.error} ${estimate ? "Showing a pool-level estimate." : "No 24h pool analytics to fall back on."}`}
                   retryAfter={bins.retryAfter}
                   onRetry={bins.retry}
                 />
@@ -206,7 +193,7 @@ export default function Planner() {
               />
             </Panel>
             <Panel title="Bin plan">
-              <BinPlan pool={pricedPool!} data={binData} from={range.from} to={range.to} estimate={estimate} />
+              <BinPlan pool={pool} data={binData} from={range.from} to={range.to} estimate={estimate} />
             </Panel>
           </>
         )}
@@ -241,7 +228,7 @@ function FeeSummary({ estimate, days, pool }: { estimate: Estimate; days: number
         <Big label="Fees / day" value={fmtUsd(estimate.dailyFees)} />
         <Big label={`Fees · ${days}d`} value={fmtUsd(projectFees(estimate.dailyFees, estimate.deposit, days).simple)} />
         <Big label="Your est. APR" value={fmtApr(estimate.apr)} tone="text-accent" />
-        <Big label="Pool 7d APR" value={fmtApr(poolApr)} sub={poolFees.basis === "24h" ? `${fmtUsd(poolFees.value)}/day pool fees (24h)` : undefined} />
+        <Big label="Pool 7d APR" value={fmtApr(poolApr)} sub={poolFees ? `${fmtUsd(poolFees.dailyFees)}/day pool fees (24h)` : undefined} />
       </div>
       <div className="overflow-x-auto">
         <table className="num w-full text-sm">

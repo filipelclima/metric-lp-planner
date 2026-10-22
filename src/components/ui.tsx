@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { TIER_LABEL } from "@/lib/risk";
 import type { Tier } from "@/lib/types";
 
 export function Panel({ title, right, children, className = "" }: { title?: ReactNode; right?: ReactNode; children: ReactNode; className?: string }) {
@@ -45,18 +46,25 @@ export function Segmented<T extends string | number>({
   );
 }
 
-const TIER_STYLE: Record<Tier, string> = {
+const TIER_STYLE: Record<Tier | "private", string> = {
   green: "bg-good/15 text-good border-good/30",
   yellow: "bg-warn/15 text-warn border-warn/30",
   red: "bg-bad/15 text-bad border-bad/30",
-  unknown: "bg-panel-2 text-muted border-line",
+  black: "bg-black text-text border-line",
+  unclassified: "bg-panel-2 text-muted border-line",
+  private: "bg-accent-2/15 text-accent-2 border-accent-2/30",
 };
 
-export function TierBadge({ tier }: { tier: Tier }) {
+/** Tier badge; pools with deposit whitelisting show "Private" instead of a tier. */
+export function TierBadge({ tier, isPrivate }: { tier: Tier; isPrivate: boolean }) {
+  const key = isPrivate ? "private" : tier;
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${TIER_STYLE[tier]}`}>
+    <span
+      title={isPrivate ? "Deposits are whitelisted" : `Metric tier: ${tier}`}
+      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-medium ${TIER_STYLE[key]}`}
+    >
       <span className="h-1.5 w-1.5 rounded-full bg-current" />
-      {tier === "unknown" ? "n/a" : tier}
+      {isPrivate ? "Private" : TIER_LABEL[tier]}
     </span>
   );
 }

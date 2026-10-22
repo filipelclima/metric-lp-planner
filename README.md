@@ -46,15 +46,19 @@ All data comes from the public Metric API (`https://api.metric.xyz/public/v1`), 
 
 | Route | Upstream | Cache |
 | --- | --- | --- |
-| `/api/pools` | `/evm/metadata?include24h=true&count=500&sortBy=tvl` (follows `nextOffset`) | 300s |
+| `/api/pools` | `/evm/metadata?include24h=true&count=500&sortBy=tvl&chainIds={id}`, one request per supported chain; pages with `offset=nextOffset` until `null`; envelope `{ data, total, nextOffset }` | 300s |
 | `/api/pools/{chain}/{pool}` | `/evm/{chain}/{pool}/metadata?contract_version=v1&include24h=true` | 300s |
 | `/api/pools/{chain}/{pool}/bins?period=` | `/evm/{chain}/{pool}/analytics/bins?contract_version=v1&period=` (**undocumented**, used by app.metric.xyz) | 60s |
-| `/api/price/{chain}/{token}` | `/evm/{chain}/tokens/{token}/fiat-price` (used only when metadata has no price) | 60s |
-| `/api/chains` | `/chains` | 300s |
+| `/api/chains` | `/chains` → `{ chains: [{ type, chainId, name }] }` (keyed on `chainId`; name casing varies) | 300s |
 
 Error handling:
 - An upstream `429` is passed through with `retryAfter`, and the UI shows a Retry button.
-- If the bins endpoint fails, the estimate falls back to pool-level data. It is labelled **"pool-level (no per-bin data)"** and uses the pool's 24h LP fees when present, otherwise the 7d fee APR × TVL, shared pro-rata with TVL.
+- If the bins endpoint fails, the estimate falls back to pool-level data, labelled **"pool-level (no per-bin data)"**: `analytics24h.feesFiat` (per day of its window) shared pro-rata against `analytics24h.tvlFiat`.
+- A pool's chainId always comes from the request (`chainIds` filter or URL path), never from its `chain` field.
+- Optional pool fields (`aprBps7d`, `tradingPnlAprBps7d`, `pauseLevel`, `curBinIdx`, `extensionDetails`, `tvlFiat`, `analytics24h`) are omitted when absent.
+- `token*FiatPrice` can be `null`. Token amounts for that token are then shown as unavailable.
+- `bin` and `swapCount` in the bins response are strings, and are parsed to numbers.
+- Tiers are `green` (Best Practices), `yellow` (Neutral), `red` (High Risk), `black` and `unclassified`. Red and black pools get a prominent warning, and pools with `depositWhitelistingEnabled` show "Private" instead of a tier.
 - Very large integers such as `priceProviderCooldownSecs = 2^64−1` are parsed with BigInt, and anything ≥ 2^53 is shown as "never".
 
 Docs: <https://docs.metric.xyz/llms-full.txt>
@@ -63,8 +67,8 @@ Docs: <https://docs.metric.xyz/llms-full.txt>
 
 Everything is in `src/lib/calc.ts`, as pure functions with tests in `tests/`.
 
-- **Window**: `windowDays = (toTs − fromTs) / 86400`. It can be shorter than the requested period for young pools, so the code never assumes 7 or 30.
-- **Bin edges**: cumulative sums of `lengthE6` (100 = 0.01%), with bin 0 starting at 0%. Bins are not assumed to have equal width. Mid = (low + high) / 2.
+- **Window**: `windowDays = (toTs − fromTs) / 86400`. The window is capped at the pool's age (e.g. `30d` and `all` both gave 14.02 days for a young pool), so the code never assumes 7 or 30.
+- **Bin edges**: bin `i` spans `[i·w, (i+1)·w]` with `w = lengthE6 / 1e6` (100 → 0.01%), and its mid is `(i + 0.5)·w`. So `#-8 = -0.075%` and `#7 = +0.075%`, matching the official app.
 - **Per bin**:
   - `fees_b = token0.lpFeesFiat + token1.lpFeesFiat`
   - `liq_b = token0.avgLiquidityFiat + token1.avgLiquidityFiat`, or the reserves if that sum is 0
@@ -74,7 +78,7 @@ Everything is in `src/lib/calc.ts`, as pure functions with tests in `tests/`.
 - **Compounding**: `r = userDaily / deposit`, `value = D × (1 + r)^days − D`.
 - **Sanity check**: as `U_b → 0`, `dailyFees_b × 365 / liq_b` should equal Metric's `aprBps / 10000`.
   - `tests/calc.test.ts` checks this on synthetic data.
-  - `tests/fixtures.test.ts` checks it on **real** responses to within 1%. Run `npm run fixtures` first to download them into `tests/fixtures/`. The test is skipped when no fixtures are present.
+  - `tests/fixtures.test.ts` checks it to within 1% on **real** SKHYB/USDT (BSC) data in `tests/fixtures/`: a 24h `/analytics/bins` excerpt, plus 7d per-bin totals. `npm run fixtures` downloads full, current responses next to them.
 
 Estimates assume past volume and liquidity continue and that the price stays in your range. **Fees ≠ profit**: price moves can outweigh earned fees.
 
@@ -82,7 +86,7 @@ Estimates assume past volume and liquidity continue and that the price stays in 
 
 ```
 src/lib/calc.ts        fee model, presets, distributions, formatting (pure)
-src/lib/normalize.ts   API → Pool normalization (tolerant of field/envelope variations)
+src/lib/normalize.ts   API → Pool normalization (exact Metric response shapes, typed in types.ts)
 src/lib/num.ts         safe number / BigInt parsing
 src/lib/risk.ts        tier + reason-code copy
 src/lib/urlState.ts    shareable URL state

@@ -1,0 +1,17 @@
+{"pair":"0xee90641E7c3b4d6338Ab7f1c23Dfb979FAb5f096","chain":"BSC","period":"24h","fiatAvailable":true,"fiatCurrency":"USD",
+ "window":{"fromTs":1792612553,"toTs":1792698953},"curBinIdx":-1,
+ "bins":[
+  {"bin":"-2","swapCount":"1500","hasBaseline":true,"totalShares":"3967276512146296168458","lengthE6":100,"addFeeBuyE6":0,"addFeeSellE6":0,
+   "token0":{"volumeRaw":"37913710633305132761840","lpFeesRaw":"6182243963678321177","avgLiquidityRaw":"183666338583037835663","reserveRaw":"0","volumeFiat":5001576.706746,"lpFeesFiat":815.561624,"avgLiquidityFiat":24229.263386,"reserveFiat":0.0},
+   "token1":{"volumeRaw":"5355304474514047567661685","lpFeesRaw":"1033445704165569570943","avgLiquidityRaw":"209341498318870417620527","reserveRaw":"247426650592913754377953","volumeFiat":5349761.734383,"lpFeesFiat":1032.376088,"avgLiquidityFiat":209124.829868,"reserveFiat":247170.56401},
+   "aprBps":28904,"pnlAprBps":-39586},
+  {"bin":"-1","swapCount":"3820","hasBaseline":true,"totalShares":"10516389293927990051599","lengthE6":100,"addFeeBuyE6":0,"addFeeSellE6":0,
+   "token0":{"volumeFiat":11758578.404509,"lpFeesFiat":1774.66937,"avgLiquidityFiat":351625.192354,"reserveFiat":206650.836671},
+   "token1":{"volumeFiat":12218036.729054,"lpFeesFiat":2073.944585,"avgLiquidityFiat":170079.303237,"reserveFiat":400748.379476},
+   "aprBps":26926,"pnlAprBps":55138},
+  {"bin":"0","swapCount":"0","lengthE6":100,
+   "token0":{"volumeFiat":0,"lpFeesFiat":0,"avgLiquidityFiat":123549.662242,"reserveFiat":162988.379187},
+   "token1":{"volumeFiat":0,"lpFeesFiat":0,"avgLiquidityFiat":0,"reserveFiat":0},
+   "aprBps":0,"pnlAprBps":0},
+  {"bin":"14","swapCount":"0","totalShares":"0","lengthE6":100,"token0":{"lpFeesFiat":0,"avgLiquidityFiat":0,"reserveFiat":0},"token1":{"lpFeesFiat":0,"avgLiquidityFiat":0,"reserveFiat":0},"aprBps":0,"pnlAprBps":null}
+ ]}

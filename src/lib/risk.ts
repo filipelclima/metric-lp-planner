@@ -1,44 +1,46 @@
-import type { Tier } from "./types";
+import type { PriceProviderStatus, Tier } from "./types";
 
-/** Plain-English labels for known classification reason codes. Unknown codes are humanized. */
-const REASONS: Record<string, string> = {
-  LOW_TVL: "Low total value locked — small pools move more on each trade.",
-  LOW_LIQUIDITY: "Thin liquidity — trades and withdrawals can move the price.",
-  LOW_VOLUME: "Little trading volume — fee estimates are noisy.",
-  NEGATIVE_PNL: "LPs in this pool have recently lost money on price moves.",
-  NEGATIVE_TRADING_PNL: "LPs in this pool have recently lost money on price moves.",
-  HIGH_VOLATILITY: "The price is volatile — your position can drift out of range or lose value.",
-  PRICE_PROVIDER_STALE: "The oracle price feed has been stale.",
-  PRICE_PROVIDER_UNHEALTHY: "The oracle price feed is not healthy.",
-  UNVERIFIED_ADMIN: "The pool curator is not verified.",
-  UNVERIFIED_CURATOR: "The pool curator is not verified.",
-  PAUSED: "The pool is (partly) paused.",
-  NEW_POOL: "The pool is new, so there is little history to estimate from.",
-  YOUNG_POOL: "The pool is new, so there is little history to estimate from.",
-  HIGH_FEES: "Pool admin/protocol fees are high.",
+/** Metric classification reason codes in plain English. */
+export const REASONS: Record<string, string> = {
+  bin_width_exceeded: "Bins are wider than 1%",
+  stop_loss_missing: "No StopLoss protection attached",
+  stop_loss_uninitialized: "StopLoss attached but not initialized",
+  stop_loss_mutable: "StopLoss settings can still be changed by the curator",
+  stop_loss_drawdown_exceeded: "StopLoss allows drawdowns above 15%",
+  stop_loss_decay_exceeded: "StopLoss decay is above 15% per day",
+  app_missing: "Not priced by an Anchored Price Provider",
+  app_mutable: "Price provider parameters can be changed",
+  feed_staleness_exceeded: "Price feed can be more than 15s stale",
+  price_provider_mutable: "The pool's price provider can be replaced",
+  curator_unverified: "Curator is not verified by Metric",
+  curator_not_creator: "Curator is not the pool's creator",
+  remove_liquidity_extension_present: "An extension can block withdrawals",
+  anchored_feed_unmatched: "Oracle feeds can't be confirmed to match the pool's tokens",
+  multiplier_feed_miswired: "Tokenized-stock multiplier oracle is miswired",
+  multiplier_token_unscaled: "Tokenized stock priced without its issuer multiplier",
 };
 
-export function reasonText(code: string): string {
-  const key = code.toUpperCase().replace(/[\s-]+/g, "_");
-  if (REASONS[key]) return REASONS[key];
-  const words = code.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").toLowerCase().trim();
-  return words ? words[0].toUpperCase() + words.slice(1) + "." : code;
-}
+/** Unknown (new) codes are shown verbatim rather than guessed at. */
+export const reasonText = (code: string) => REASONS[code] ?? code;
 
 export const TIER_LABEL: Record<Tier, string> = {
-  green: "Green tier",
-  yellow: "Yellow tier",
-  red: "Red tier",
-  unknown: "Unclassified",
+  green: "Best Practices",
+  yellow: "Neutral",
+  red: "High Risk",
+  black: "Black",
+  unclassified: "Unclassified",
 };
 
-/** Heuristic health for the price provider status string. */
-export function providerHealth(status: string | null): "ok" | "warn" | "bad" | "unknown" {
-  if (!status) return "unknown";
-  const s = status.toLowerCase();
-  // Order matters: "unhealthy" / "inactive" contain the "ok" words.
-  if (/(down|error|fail|paused|halt|inactive|unhealthy|invalid)/.test(s)) return "bad";
-  if (/(stale|delay|degraded|cooldown|warn)/.test(s)) return "warn";
-  if (/(^ok$|healthy|active|live|normal|fresh|valid)/.test(s)) return "ok";
-  return "unknown";
+export const PROVIDER_LABEL: Record<PriceProviderStatus, string> = {
+  healthy: "Healthy",
+  feed_down: "Feed down",
+  pool_refused: "Pool refused",
+  pool_paused: "Pool paused",
+  unknown: "Unknown",
+};
+
+export function providerHealth(status: PriceProviderStatus): "ok" | "bad" | "unknown" {
+  if (status === "healthy") return "ok";
+  if (status === "unknown") return "unknown";
+  return "bad";
 }

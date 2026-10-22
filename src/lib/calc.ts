@@ -3,7 +3,6 @@
  *
  * Units: percentages are "percent units" (0.01 means 0.01%), USD amounts are plain numbers.
  */
-import { toNum, toNumOrNull } from "./num";
 import type { Pool, RawBin, RawBinsResponse, Strategy } from "./types";
 
 export interface Bin {
@@ -24,7 +23,7 @@ export interface Bin {
   swapCount: number;
   aprBps: number | null;
   pnlAprBps: number | null;
-  /** False for bins we synthesized (no row returned by the API). */
+  /** False for bins the API didn't return (filled in as empty). */
   hasData: boolean;
 }
 
@@ -40,29 +39,20 @@ export interface BinData {
 
 const SECONDS_PER_DAY = 86400;
 
-/** Accepts seconds, milliseconds or ISO strings. Returns seconds. */
-export function toSeconds(v: unknown): number {
-  if (typeof v === "string" && v.trim() !== "" && Number.isNaN(Number(v))) {
-    const t = Date.parse(v);
-    return Number.isNaN(t) ? 0 : t / 1000;
-  }
-  const n = toNum(v);
-  return n > 1e12 ? n / 1000 : n;
-}
-
-export function windowDays(window: { fromTs: unknown; toTs: unknown }): number {
-  const d = (toSeconds(window.toTs) - toSeconds(window.fromTs)) / SECONDS_PER_DAY;
+/** Window timestamps are unix seconds. The window can be shorter than the period (capped at pool age). */
+export function windowDays(window: { fromTs: number; toTs: number }): number {
+  const d = (window.toTs - window.fromTs) / SECONDS_PER_DAY;
   return d > 0 ? d : 0;
 }
 
 export function binFees(b: RawBin): number {
-  return toNum(b.token0?.lpFeesFiat) + toNum(b.token1?.lpFeesFiat);
+  return b.token0.lpFeesFiat + b.token1.lpFeesFiat;
 }
 
 export function binLiquidity(b: RawBin): number {
-  const avg = toNum(b.token0?.avgLiquidityFiat) + toNum(b.token1?.avgLiquidityFiat);
+  const avg = b.token0.avgLiquidityFiat + b.token1.avgLiquidityFiat;
   if (avg > 0) return avg;
-  return toNum(b.token0?.reserveFiat) + toNum(b.token1?.reserveFiat);
+  return b.token0.reserveFiat + b.token1.reserveFiat;
 }
 
 function mode(values: number[], fallback: number): number {
@@ -77,72 +67,18 @@ function mode(values: number[], fallback: number): number {
   return best;
 }
 
-/**
- * Turns the raw /analytics/bins response into dense bins with edges.
- * Edges are cumulative sums of lengthE6 starting at bin 0 = 0% (bins are not assumed uniform);
- * bins missing from the response use the most common width.
- */
-export function parseBins(raw: RawBinsResponse): BinData {
-  const days = windowDays(raw.window);
-  const cur = toNum(raw.curBinIdx);
-  const rows = new Map<number, RawBin>();
-  for (const b of raw.bins ?? []) rows.set(toNum(b.bin), b);
-  const widths = [...rows.values()].map((b) => toNum(b.lengthE6)).filter((w) => w > 0);
-  const defaultLengthE6 = mode(widths, 100);
-
-  const idxs = [...rows.keys(), cur, -1, 0];
-  const minIdx = Math.min(...idxs);
-  const maxIdx = Math.max(...idxs);
-  const widthOf = (i: number) => {
-    const w = toNum(rows.get(i)?.lengthE6);
-    return w > 0 ? w : defaultLengthE6;
-  };
-
-  // lowE6[i] for i in [minIdx, maxIdx + 1]: bin i spans [lowE6[i], lowE6[i + 1]).
-  const low = new Map<number, number>([[0, 0]]);
-  for (let i = 0; i <= maxIdx; i++) low.set(i + 1, low.get(i)! + widthOf(i));
-  for (let i = -1; i >= minIdx; i--) low.set(i, low.get(i + 1)! - widthOf(i));
-
-  const bins: Bin[] = [];
-  for (let i = minIdx; i <= maxIdx; i++) {
-    const r = rows.get(i);
-    const lowPct = low.get(i)! / 1e4;
-    const highPct = low.get(i + 1)! / 1e4;
-    const feesFiat = r ? binFees(r) : 0;
-    bins.push({
-      idx: i,
-      lengthE6: widthOf(i),
-      lowPct,
-      highPct,
-      midPct: (lowPct + highPct) / 2,
-      volumeFiat: r ? toNum(r.token0?.volumeFiat) + toNum(r.token1?.volumeFiat) : 0,
-      feesFiat,
-      dailyFees: days > 0 ? feesFiat / days : 0,
-      liquidity: r ? binLiquidity(r) : 0,
-      reserve0Fiat: toNum(r?.token0?.reserveFiat),
-      reserve1Fiat: toNum(r?.token1?.reserveFiat),
-      swapCount: toNum(r?.swapCount),
-      aprBps: toNumOrNull(r?.aprBps),
-      pnlAprBps: toNumOrNull(r?.pnlAprBps),
-      hasData: !!r,
-    });
-  }
-  return { windowDays: days, curBinIdx: cur, defaultLengthE6, bins, minIdx, maxIdx };
+/** Bin i spans [i·w, (i+1)·w] with w = lengthE6 / 1e6, i.e. lengthE6 / 1e4 in percent units. */
+function binEdges(idx: number, lengthE6: number) {
+  const w = lengthE6 / 1e4;
+  return { lowPct: idx * w, highPct: (idx + 1) * w, midPct: (idx + 0.5) * w };
 }
 
-/** Returns the bin at idx, synthesizing an empty bin (default width) outside the known span. */
-export function getBin(data: BinData, idx: number): Bin {
-  if (idx >= data.minIdx && idx <= data.maxIdx) return data.bins[idx - data.minIdx];
-  const w = data.defaultLengthE6 / 1e4;
-  let lowPct: number;
-  if (idx > data.maxIdx) lowPct = data.bins[data.bins.length - 1].highPct + (idx - data.maxIdx - 1) * w;
-  else lowPct = data.bins[0].lowPct - (data.minIdx - idx) * w;
+/** Empty bin for indices the API didn't return; uses the pool's most common width. */
+function emptyBin(idx: number, lengthE6: number): Bin {
   return {
     idx,
-    lengthE6: data.defaultLengthE6,
-    lowPct,
-    highPct: lowPct + w,
-    midPct: lowPct + w / 2,
+    lengthE6,
+    ...binEdges(idx, lengthE6),
     volumeFiat: 0,
     feesFiat: 0,
     dailyFees: 0,
@@ -154,6 +90,54 @@ export function getBin(data: BinData, idx: number): Bin {
     pnlAprBps: null,
     hasData: false,
   };
+}
+
+/** Turns the raw /analytics/bins response into dense bins with edges. `bin` and `swapCount` arrive as strings. */
+export function parseBins(raw: RawBinsResponse): BinData {
+  const days = windowDays(raw.window);
+  const cur = raw.curBinIdx;
+  const rows = new Map<number, RawBin>();
+  for (const b of raw.bins) rows.set(Number(b.bin), b);
+  const defaultLengthE6 = mode(
+    [...rows.values()].map((b) => b.lengthE6).filter((w) => w > 0),
+    100,
+  );
+
+  const idxs = [...rows.keys(), cur, -1, 0];
+  const minIdx = Math.min(...idxs);
+  const maxIdx = Math.max(...idxs);
+
+  const bins: Bin[] = [];
+  for (let i = minIdx; i <= maxIdx; i++) {
+    const r = rows.get(i);
+    if (!r) {
+      bins.push(emptyBin(i, defaultLengthE6));
+      continue;
+    }
+    const feesFiat = binFees(r);
+    bins.push({
+      idx: i,
+      lengthE6: r.lengthE6,
+      ...binEdges(i, r.lengthE6),
+      volumeFiat: (r.token0.volumeFiat ?? 0) + (r.token1.volumeFiat ?? 0),
+      feesFiat,
+      dailyFees: days > 0 ? feesFiat / days : 0,
+      liquidity: binLiquidity(r),
+      reserve0Fiat: r.token0.reserveFiat,
+      reserve1Fiat: r.token1.reserveFiat,
+      swapCount: Number(r.swapCount),
+      aprBps: r.aprBps,
+      pnlAprBps: r.pnlAprBps,
+      hasData: true,
+    });
+  }
+  return { windowDays: days, curBinIdx: cur, defaultLengthE6, bins, minIdx, maxIdx };
+}
+
+/** Returns the bin at idx, or an empty bin (default width) outside the returned span. */
+export function getBin(data: BinData, idx: number): Bin {
+  if (idx >= data.minIdx && idx <= data.maxIdx) return data.bins[idx - data.minIdx];
+  return emptyBin(idx, data.defaultLengthE6);
 }
 
 export function binsInRange(data: BinData, from: number, to: number): Bin[] {
@@ -254,9 +238,10 @@ export interface Estimate {
   token1Amount: number;
 }
 
+/** Token fiat prices; null when Metric has no price (token amounts then show as unavailable). */
 export interface Prices {
-  token0: number;
-  token1: number;
+  token0: number | null;
+  token1: number | null;
 }
 
 /** Splits USD across token0/token1: below the current bin → token1, above → token0, current → reserve ratio. */
@@ -268,7 +253,7 @@ export function splitTokens(bin: Bin, usd: number, curBinIdx: number): { token0U
   return { token0Usd: usd * ratio0, token1Usd: usd * (1 - ratio0) };
 }
 
-const amount = (usd: number, price: number) => (price > 0 ? usd / price : 0);
+const amount = (usd: number, price: number | null) => (price !== null && price > 0 ? usd / price : 0);
 
 /** Per-bin fee model: userDaily = Σ dailyFees_b × U_b / (liq_b + U_b). */
 export function estimateFromBins(
@@ -313,24 +298,23 @@ export function estimateFromBins(
   };
 }
 
-/** Pool's daily LP fees from 24h analytics, else from the 7d fee APR × TVL. */
-export function poolDailyFees(pool: Pick<Pool, "lpFees24hFiat" | "aprBps7d" | "tvlFiat">): {
-  value: number;
-  basis: "24h" | "apr7d" | "none";
-} {
-  if (pool.lpFees24hFiat !== null && pool.lpFees24hFiat >= 0) return { value: pool.lpFees24hFiat, basis: "24h" };
-  if (pool.aprBps7d !== null) return { value: ((pool.aprBps7d / 1e4) * pool.tvlFiat) / 365, basis: "apr7d" };
-  return { value: 0, basis: "none" };
+/** Pool-level daily LP fees and TVL from analytics24h (fees divided by that window's length). */
+export function poolDailyFees(pool: Pick<Pool, "analytics24h">): { dailyFees: number; tvlFiat: number } | null {
+  const a = pool.analytics24h;
+  if (!a) return null;
+  const days = windowDays(a);
+  return { dailyFees: days > 0 ? a.feesFiat / days : 0, tvlFiat: a.tvlFiat };
 }
 
-/** Fallback when per-bin data is unavailable: user earns pro-rata on the whole pool. */
-export function estimateFromPool(
-  pool: Pick<Pool, "lpFees24hFiat" | "aprBps7d" | "tvlFiat">,
-  deposit: number,
-): Estimate {
-  const { value } = poolDailyFees(pool);
-  const denom = pool.tvlFiat + deposit;
-  const dailyFees = denom > 0 ? (value * deposit) / denom : 0;
+/**
+ * Fallback when per-bin data is unavailable: the user earns pro-rata on the whole pool,
+ * using analytics24h.feesFiat / analytics24h.tvlFiat. Null when the pool has no 24h analytics.
+ */
+export function estimateFromPool(pool: Pick<Pool, "analytics24h">, deposit: number): Estimate | null {
+  const p = poolDailyFees(pool);
+  if (!p) return null;
+  const denom = p.tvlFiat + deposit;
+  const dailyFees = denom > 0 ? (p.dailyFees * deposit) / denom : 0;
   return {
     source: "pool",
     deposit,
@@ -397,7 +381,7 @@ export function fmtUsd(v: number, opts: { compact?: boolean } = {}): string {
 }
 
 /** Token amount; with a price, shows enough decimals for ~$0.01 precision. */
-export function fmtAmount(v: number, price?: number): string {
+export function fmtAmount(v: number, price?: number | null): string {
   if (!Number.isFinite(v)) return "—";
   const a = Math.abs(v);
   const digits =

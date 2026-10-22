@@ -1,20 +1,25 @@
 import { bpsToFraction, fmtApr } from "@/lib/calc";
-import { providerHealth, reasonText, TIER_LABEL } from "@/lib/risk";
+import { PROVIDER_LABEL, providerHealth, reasonText, TIER_LABEL } from "@/lib/risk";
 import type { Pool } from "@/lib/types";
 import { Panel, TierBadge } from "./ui";
 
-const HEALTH_DOT = { ok: "bg-good", warn: "bg-warn", bad: "bg-bad", unknown: "bg-muted" } as const;
+const HEALTH_DOT = { ok: "bg-good", bad: "bg-bad", unknown: "bg-muted" } as const;
+
+const pctE6 = (e6: number) => `${(e6 / 1e4).toFixed(2).replace(/\.?0+$/, "")}%`;
 
 export function RedTierBanner({ pool }: { pool: Pool }) {
-  if (pool.tier !== "red") return null;
+  if (pool.tier !== "red" && pool.tier !== "black") return null;
   return (
     <div role="alert" className="rounded-2xl border border-bad/40 bg-bad/10 px-4 py-3 text-sm text-bad">
-      <div className="font-semibold">⚠ This pool is classified red.</div>
-      <div className="mt-0.5 text-bad/90">
-        Metric flags it as high risk
-        {pool.reasonCodes.length > 0 && <>: {pool.reasonCodes.map(reasonText).join(" ")}</>} Fee estimates here may be far from what you earn, and
-        you can lose a large part of your deposit.
-      </div>
+      <div className="font-semibold">⚠ Metric classifies this pool as {pool.tier === "red" ? "High Risk (red)" : "black"}.</div>
+      {pool.reasonCodes.length > 0 && (
+        <ul className="mt-1 list-inside list-disc text-bad/90">
+          {pool.reasonCodes.map((c) => (
+            <li key={c}>{reasonText(c)}</li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-1 text-bad/90">Fee estimates may be far from what you earn, and you can lose a large part of your deposit.</div>
     </div>
   );
 }
@@ -24,14 +29,15 @@ export default function RiskPanel({ pool }: { pool: Pool }) {
   const feeApr = bpsToFraction(pool.aprBps7d);
   const pnlApr = bpsToFraction(pool.tradingPnlAprBps7d);
   const cooldown = pool.priceProviderCooldown;
+  const sl = pool.stopLoss;
 
   return (
     <Panel title="Risk">
       <dl className="space-y-3 text-sm">
         <Row label="Pool tier">
           <span className="flex items-center gap-2">
-            <TierBadge tier={pool.tier} />
-            <span className="text-muted">{TIER_LABEL[pool.tier]}</span>
+            <TierBadge tier={pool.tier} isPrivate={pool.isPrivate} />
+            {pool.isPrivate && <span className="text-xs text-muted">{TIER_LABEL[pool.tier]}</span>}
           </span>
         </Row>
         {pool.reasonCodes.length > 0 && (
@@ -46,7 +52,7 @@ export default function RiskPanel({ pool }: { pool: Pool }) {
         <Row label="Price provider">
           <span className="flex items-center gap-1.5">
             <span className={`h-2 w-2 rounded-full ${HEALTH_DOT[health]}`} />
-            {pool.priceProviderStatus ?? "Unknown"}
+            {PROVIDER_LABEL[pool.priceProviderStatus]}
           </span>
         </Row>
         {(cooldown.never || cooldown.value !== null) && (
@@ -59,7 +65,21 @@ export default function RiskPanel({ pool }: { pool: Pool }) {
             <span className="text-warn">Not verified{pool.adminUsername ? ` · ${pool.adminUsername}` : ""}</span>
           )}
         </Row>
-        {pool.pauseLevel !== null && pool.pauseLevel > 0 && (
+        <Row label="StopLoss">
+          {sl ? (
+            <span title={`Timelock ${sl.timelockSecs}s`}>
+              max drawdown {pctE6(sl.drawdownE6)} · decay {((sl.decayPerSecondE18 * 86400) / 1e16).toFixed(2)}%/day
+            </span>
+          ) : (
+            <span className="text-warn">None</span>
+          )}
+        </Row>
+        <Row label="Spread fee (curator / protocol)">
+          <span className="num">
+            {pctE6(pool.spreadAdminFeeE6)} / {pctE6(pool.spreadProtocolFeeE6)}
+          </span>
+        </Row>
+        {pool.pauseLevel > 0 && (
           <Row label="Paused">
             <span className="text-bad">Level {pool.pauseLevel}</span>
           </Row>

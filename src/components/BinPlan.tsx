@@ -13,8 +13,10 @@ interface Props {
 
 export function tokensNeededText(pool: Pool, e: Estimate): string {
   const parts: string[] = [];
-  if (e.token1Usd > 0) parts.push(`${fmtAmount(e.token1Amount, pool.token1.fiatPrice)} ${pool.token1.symbol}`);
-  if (e.token0Usd > 0) parts.push(`${fmtAmount(e.token0Amount, pool.token0.fiatPrice)} ${pool.token0.symbol}`);
+  const part = (usd: number, amt: number, t: Pool["token0"]) =>
+    t.fiatPrice ? `${fmtAmount(amt, t.fiatPrice)} ${t.symbol}` : `${fmtUsd(usd)} of ${t.symbol} (no price)`;
+  if (e.token1Usd > 0) parts.push(part(e.token1Usd, e.token1Amount, pool.token1));
+  if (e.token0Usd > 0) parts.push(part(e.token0Usd, e.token0Amount, pool.token0));
   return parts.length ? `You'll need ≈ ${parts.join(" + ")}` : "";
 }
 
@@ -22,7 +24,10 @@ export default function BinPlan({ pool, data, from, to, estimate }: Props) {
   const [copied, setCopied] = useState(false);
   const plan = planText(data, from, to);
   const tokens = tokensNeededText(pool, estimate);
-  const missingPrice = (estimate.token0Usd > 0 && pool.token0.fiatPrice <= 0) || (estimate.token1Usd > 0 && pool.token1.fiatPrice <= 0);
+  const missing = [
+    estimate.token0Usd > 0 && !pool.token0.fiatPrice && pool.token0.symbol,
+    estimate.token1Usd > 0 && !pool.token1.fiatPrice && pool.token1.symbol,
+  ].filter(Boolean);
 
   const copy = async () => {
     try {
@@ -53,7 +58,9 @@ export default function BinPlan({ pool, data, from, to, estimate }: Props) {
           {fmtUsd(estimate.token1Usd)} in {pool.token1.symbol} (bins below the active bin) · {fmtUsd(estimate.token0Usd)} in {pool.token0.symbol}{" "}
           (bins above) · the active bin takes both at its current reserve ratio
         </div>
-        {missingPrice && <div className="mt-1 text-xs text-warn">A token price is missing, so token amounts may show as 0.</div>}
+        {missing.length > 0 && (
+          <div className="mt-1 text-xs text-warn">Metric has no fiat price for {missing.join(" and ")}, so its token amount is unavailable.</div>
+        )}
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-line">
@@ -85,8 +92,8 @@ export default function BinPlan({ pool, data, from, to, estimate }: Props) {
                   <td className="px-2 py-1.5">{fmtBinPct(p.bin.midPct)}</td>
                   <td className="px-2 py-1.5 text-muted">{fmtBinPct(p.bin.highPct)}</td>
                   <td className="px-2 py-1.5 text-right">{fmtUsd(p.usd)}</td>
-                  <td className="px-2 py-1.5 text-right">{p.token0Usd > 0 ? fmtAmount(p.token0Amount, pool.token0.fiatPrice) : <span className="text-muted">—</span>}</td>
-                  <td className="px-2 py-1.5 text-right">{p.token1Usd > 0 ? fmtAmount(p.token1Amount, pool.token1.fiatPrice) : <span className="text-muted">—</span>}</td>
+                  <td className="px-2 py-1.5 text-right">{p.token0Usd > 0 && pool.token0.fiatPrice ? fmtAmount(p.token0Amount, pool.token0.fiatPrice) : <span className="text-muted">—</span>}</td>
+                  <td className="px-2 py-1.5 text-right">{p.token1Usd > 0 && pool.token1.fiatPrice ? fmtAmount(p.token1Amount, pool.token1.fiatPrice) : <span className="text-muted">—</span>}</td>
                   <td className="px-2 py-1.5 text-right">{(p.share * 100).toFixed(2)}%</td>
                   <td className="px-2 py-1.5 text-right">{fmtUsd(p.dailyFees)}</td>
                   <td className="px-2 py-1.5 text-right text-accent">{fmtApr(p.apr)}</td>

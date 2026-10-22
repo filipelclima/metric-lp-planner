@@ -1,0 +1,13 @@
+{
+  "source": "api.metric.xyz analytics/bins, chain 56, SKHYB/USDT, period=7d (per-bin totals across token0+token1)",
+  "windowDays": 7.0,
+  "columns": ["bin", "swapCount", "lpFeesFiat", "avgLiquidityFiat", "aprBps"],
+  "rows": [
+    [-3, 3969, 3027, 54093, 29177],
+    [-2, 5977, 4914, 83780, 30584],
+    [-1, 13376, 11700, 167622, 36396],
+    [0, 6111, 4343, 69751, 32466],
+    [1, 1765, 599, 20166, 15483],
+    [2, 1330, 312, 7466, 21786]
+  ]
+}

@@ -20,10 +20,11 @@ function bin(i: number, vol: number, fees: number, liq: number, days: number, ex
   return {
     bin: String(i),
     swapCount: "10",
+    totalShares: "1000",
     lengthE6: 100,
-    token0: { volumeFiat: String(vol / 2), lpFeesFiat: String(fees / 2), avgLiquidityFiat: String(liq / 2), reserveFiat: String(liq / 2) },
-    token1: { volumeFiat: String(vol / 2), lpFeesFiat: String(fees / 2), avgLiquidityFiat: String(liq / 2), reserveFiat: String(liq / 2) },
-    aprBps: liq > 0 ? String(Math.round(((fees / days) * 365 * 1e4) / liq)) : "0",
+    token0: { volumeFiat: vol / 2, lpFeesFiat: fees / 2, avgLiquidityFiat: liq / 2, reserveFiat: liq / 2 },
+    token1: { volumeFiat: vol / 2, lpFeesFiat: fees / 2, avgLiquidityFiat: liq / 2, reserveFiat: liq / 2 },
+    aprBps: liq > 0 ? Math.round(((fees / days) * 365 * 1e4) / liq) : 0,
     pnlAprBps: null,
     ...extra,
   };
@@ -32,7 +33,7 @@ function bin(i: number, vol: number, fees: number, liq: number, days: number, ex
 const DAYS = 5.5; // a young pool: window shorter than the 7d period
 const raw: RawBinsResponse = {
   window: { fromTs: 1_700_000_000, toTs: 1_700_000_000 + DAYS * 86400 },
-  curBinIdx: "-1",
+  curBinIdx: -1,
   bins: [
     bin(-3, 100, 0.1, 5000, DAYS),
     bin(-2, 1000, 1, 10000, DAYS),
@@ -42,7 +43,7 @@ const raw: RawBinsResponse = {
     }),
     bin(0, 3000, 3, 20000, DAYS),
     bin(1, 800, 0.8, 10000, DAYS),
-    bin(3, 100, 0.1, 5000, DAYS, { lengthE6: 300 }), // non-uniform width, bin 2 missing
+    bin(3, 100, 0.1, 5000, DAYS, { lengthE6: 300 }), // wider bin; bin 2 missing
   ],
 };
 
@@ -51,21 +52,22 @@ describe("parseBins", () => {
 
   it("computes the window length from timestamps, not the period", () => {
     expect(data.windowDays).toBeCloseTo(DAYS, 9);
-    expect(windowDays({ fromTs: "2024-01-01T00:00:00Z", toTs: "2024-01-08T00:00:00Z" })).toBeCloseTo(7);
-    expect(windowDays({ fromTs: 1_700_000_000_000, toTs: 1_700_086_400_000 })).toBeCloseTo(1);
+    expect(windowDays({ fromTs: 1_792_612_553, toTs: 1_792_612_553 + 14.02 * 86400 })).toBeCloseTo(14.02);
   });
 
-  it("builds edges from cumulative lengthE6 starting at bin 0 = 0%", () => {
+  it("bin i spans [i·w, (i+1)·w] with w = lengthE6/1e6", () => {
     expect(getBin(data, 0).lowPct).toBeCloseTo(0);
     expect(getBin(data, 0).highPct).toBeCloseTo(0.01);
     expect(getBin(data, -1).lowPct).toBeCloseTo(-0.01);
     expect(getBin(data, -8).lowPct).toBeCloseTo(-0.08);
     expect(getBin(data, -8).midPct).toBeCloseTo(-0.075);
-    // bin 2 missing → default width; bin 3 is 3x wide
-    expect(getBin(data, 3).lowPct).toBeCloseTo(0.03);
-    expect(getBin(data, 3).highPct).toBeCloseTo(0.06);
-    expect(getBin(data, 4).lowPct).toBeCloseTo(0.06);
-    expect(fmtBinPct(getBin(data, 7).midPct)).toBe("+0.09500%");
+    expect(fmtBinPct(getBin(data, 7).midPct)).toBe("+0.07500%"); // matches the official app "#7 · +0.07500%"
+    expect(fmtBinPct(getBin(data, -8).midPct)).toBe("-0.07500%");
+    // bin 3 uses its own width (300 → 0.03%); missing bins use the most common width
+    expect(getBin(data, 3).lowPct).toBeCloseTo(0.09);
+    expect(getBin(data, 3).highPct).toBeCloseTo(0.12);
+    expect(getBin(data, 2).lowPct).toBeCloseTo(0.02);
+    expect(getBin(data, 2).hasData).toBe(false);
   });
 
   it("sums fees and liquidity across both tokens, falling back to reserves", () => {
@@ -74,7 +76,12 @@ describe("parseBins", () => {
     expect(b.liquidity).toBeCloseTo(20000);
     const r = parseBins({
       ...raw,
-      bins: [bin(0, 1, 1, 0, DAYS, { token0: { reserveFiat: 300, avgLiquidityFiat: 0 }, token1: { reserveFiat: 700, avgLiquidityFiat: "0" } })],
+      bins: [
+        bin(0, 1, 1, 0, DAYS, {
+          token0: { lpFeesFiat: 0, reserveFiat: 300, avgLiquidityFiat: 0 },
+          token1: { lpFeesFiat: 0, reserveFiat: 700, avgLiquidityFiat: 0 },
+        }),
+      ],
     });
     expect(getBin(r, 0).liquidity).toBe(1000);
   });
@@ -115,12 +122,16 @@ describe("fee model", () => {
     expect(splitTokens(getBin(data, 50), 10, -1)).toEqual({ token0Usd: 10, token1Usd: 0 });
   });
 
-  it("pool-level fallback uses 24h fees, else 7d APR × TVL", () => {
-    const a = estimateFromPool({ lpFees24hFiat: 100, aprBps7d: null, tvlFiat: 99000 }, 1000);
-    expect(a.dailyFees).toBeCloseTo(1);
+  it("pool-level fallback uses analytics24h.feesFiat / analytics24h.tvlFiat", () => {
+    const a24 = { fromTs: 0, toTs: 86400, feesFiat: 100, tvlFiat: 99000, volumeFiat: 0, aprBps: 0 };
+    const a = estimateFromPool({ analytics24h: a24 }, 1000)!;
     expect(a.source).toBe("pool");
-    const b = estimateFromPool({ lpFees24hFiat: null, aprBps7d: 3650, tvlFiat: 100000 }, 0.0001);
-    expect(b.apr).toBeCloseTo(0.365, 4);
+    expect(a.dailyFees).toBeCloseTo(1);
+    // tiny deposit → APR ≈ feesFiat × 365 / tvlFiat
+    expect(estimateFromPool({ analytics24h: a24 }, 1e-6)!.apr).toBeCloseTo((100 * 365) / 99000, 6);
+    // a 12h window doubles the daily rate
+    expect(estimateFromPool({ analytics24h: { ...a24, toTs: 43200 } }, 1000)!.dailyFees).toBeCloseTo(2);
+    expect(estimateFromPool({ analytics24h: null }, 1000)).toBeNull();
   });
 
   it("projects simple and compounded fees", () => {
