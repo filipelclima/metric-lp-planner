@@ -4,6 +4,28 @@ One entry per task, newest first. Each entry lists what changed, what couldn't b
 
 ## Entries
 
+### 2026-10-23 · `6245d01` · Pool picker: sorting, APR period, TVL filter
+- **Changed:**
+  - Pair, Chain, TVL and APR headers sort. Clicking again flips the direction, and ▲/▼ shows it. A new column starts high → low for numbers and A → Z for text.
+  - APR switch 24h (`analytics24h.aprBps`) | 7d (`aprBps7d`, default). The column header and sort follow it, and missing values show "—" and always sort last.
+  - TVL filter Any / ≥$10k (default) / ≥$100k / ≥$1M, with a "N pools under $X TVL hidden · show all" line.
+  - Prefs are kept in the page URL (`psort`, `pdir`, `papr`, `ptvl`, `pchain`; non-defaults only) and in localStorage (try/catch). A URL with picker params wins over storage.
+  - Planner and Compare (all its pickers share one set of prefs).
+  - Fix: the sticky sidebar now has a z-index, so the open dropdown isn't painted under the Bin Plan.
+  - New `src/lib/poolList.ts` and `usePickerPrefs.ts`, with 8 tests (136 total). `urlState.ts` is untouched: picker params are appended in `usePlanner`.
+- **Couldn't test:** Live data (Metric is blocked in the sandbox). Verified with unit tests and Playwright against the mock:
+  - the sorts, the 24h switch and the TVL floor;
+  - the URL and localStorage after a reload;
+  - prefs carried over to Compare;
+  - mobile bottom sheet.
+
+  The mock's 24h APRs mostly equal its 7d ones.
+- **Review:**
+  - The default ≥$10k floor hides small pools that used to be listed. The selected pool can be hidden from the list, but stays selected.
+  - Picker prefs aren't included in share links.
+  - The chain filter is remembered too, which wasn't asked for.
+  - Ties sort by higher TVL, then pair.
+
 ### 2026-10-23 · `234728d` · Bin edges vs midpoints
 - **Changed:**
   - Bin input hints now name the edge: Start "#-2 · from -0.08%" (the start bin's lower edge) and End "#1 · to +0.08%" (the end bin's upper edge).
