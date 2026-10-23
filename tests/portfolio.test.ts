@@ -292,3 +292,47 @@ describe("your result", () => {
     expect(depositAgeText(45.3)).toBe("deposited 45 days ago");
   });
 });
+
+describe("24h rates for young positions", () => {
+  it("picks 24h analytics under 2 days held, 7d otherwise (and when the age is unknown)", async () => {
+    const { ratePlan, YOUNG_POSITION_DAYS } = await import("@/lib/portfolio/model");
+    expect(YOUNG_POSITION_DAYS).toBe(2);
+    expect(ratePlan(28.5 / 24, 7)).toEqual({ period: "24h", capDays: 2 });
+    expect(ratePlan(0.1, 7)).toEqual({ period: "24h", capDays: 2 });
+    expect(ratePlan(2, 7)).toEqual({ period: "7d", capDays: 7 });
+    expect(ratePlan(30, 6.5)).toEqual({ period: "7d", capDays: 6.5 }); // young pool: 7d window shorter than 7
+    expect(ratePlan(null, 7)).toEqual({ period: "7d", capDays: 7 });
+  });
+
+  it("applies the 24h rate over the whole holding time (1.5 days isn't cut to the 1-day window)", async () => {
+    const { ratePlan } = await import("@/lib/portfolio/model");
+    const held = 1.5;
+    const bin = (aprBps: number): BinInput => ({
+      idx: 0,
+      userShares: 1n,
+      totalShares: 4n,
+      balance0Scaled: 0n,
+      balance1Scaled: 0n,
+      reserve0Fiat: 200,
+      reserve1Fiat: 200,
+      lpFeesFiat: 0,
+      aprBps,
+      pnlAprBps: aprBps - 10_000,
+    });
+    const { capDays } = ratePlan(held, 7);
+    const v = valueBins([bin(73_000)], capDays, held); // 730% on the last 24h
+    expect(v[0].valueUsd).toBe(100);
+    expect(v[0].feesUsd).toBeCloseTo((100 * 7.3 * 1.5) / 365, 12); // = $3.00
+    expect(v[0].netUsd).toBeCloseTo((100 * 6.3 * 1.5) / 365, 12);
+    // A higher 24h rate than 7d raises the estimate for a fresh position, as on a high-volume last day
+    const v7 = valueBins([bin(36_500)], ratePlan(10, 7).capDays, held);
+    expect(v[0].feesUsd).toBeGreaterThan(v7[0].feesUsd);
+  });
+
+  it("insight text names the rate window", () => {
+    const b = { idx: 4, share: 0.1, valueUsd: 10, feesUsd: 0, dailyFeesUsd: 0, netUsd: null, aprBps: 50, pnlAprBps: 10 };
+    const text = insights({ bins: [b], curBinIdx: 4, status: "in", pnlUsd: 1, pnlApprox: false, period: "24h" }).map((i) => i.text);
+    expect(text).toContain("Bin #4 had ~0.5% APR in 24h: liquidity there is idle.");
+    expect(insights({ bins: [b], curBinIdx: 4, status: "in", pnlUsd: 1, pnlApprox: false })[0].text).toMatch(/in 7d/);
+  });
+});

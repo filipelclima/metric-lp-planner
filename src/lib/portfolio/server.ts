@@ -10,7 +10,9 @@ import {
   calibrateScale,
   estNetUsd,
   heldDaysSince,
+  ratePlan,
   userFeeApr,
+  type RatePeriod,
   type BinValue,
   decodeLiquidityLog,
   groupPositions,
@@ -28,7 +30,15 @@ import type { PortfolioResponse, PortfolioSummary, PositionView } from "./types"
 
 /** Overridable for local testing against a mock; defaults to the public Metric RPC. */
 const RPC = (chainId: number) => `${process.env.METRIC_RPC_BASE ?? "https://rpc.metric.xyz"}/${chainId}`;
-const PERIOD = "7d";
+async function fetchBins(chainId: number, poolAddress: string, period: RatePeriod): Promise<BinData | null> {
+  const r = await metricFetch(`/evm/${chainId}/${poolAddress}/analytics/bins?contract_version=v1&period=${period}`, 60);
+  if (!r.ok) return null;
+  try {
+    return parseBins(r.body as RawBinsResponse);
+  } catch {
+    return null;
+  }
+}
 
 function client(chainId: number): PublicClient {
   // batch: true folds concurrent calls into one JSON-RPC batch request (used when multicall is unavailable).
@@ -116,17 +126,7 @@ async function chainPositions(chainId: number, wallet: Hex): Promise<{ positions
   const firstBlocks = [...new Set(keys.map((k) => k.firstBlock))];
   const [reads, analytics, blocks] = await Promise.all([
     readAll(c, [...shareCalls, ...binCalls]),
-    Promise.all(
-      poolAddrs.map(async (p) => {
-        const r = await metricFetch(`/evm/${chainId}/${pools.get(p)!.poolAddress}/analytics/bins?contract_version=v1&period=${PERIOD}`, 60);
-        if (!r.ok) return [p, null] as const;
-        try {
-          return [p, parseBins(r.body as RawBinsResponse)] as const;
-        } catch {
-          return [p, null] as const;
-        }
-      }),
-    ),
+    Promise.all(poolAddrs.map(async (p) => [p, await fetchBins(chainId, pools.get(p)!.poolAddress, "7d")] as const)),
     Promise.all(firstBlocks.map((n) => c.getBlock({ blockNumber: n }).then((b) => [n, Number(b.timestamp)] as const).catch(() => [n, null] as const))),
   ]);
 
@@ -143,10 +143,28 @@ async function chainPositions(chainId: number, wallet: Hex): Promise<{ positions
   const blockTs = new Map<bigint, number | null>(blocks);
   const now = Date.now() / 1000;
 
+  // Young positions (< 2 days) take their rates from 24h analytics: fetch those only for pools that need them.
+  const youngPools = [
+    ...new Set(keys.filter((k) => ratePlan(heldDaysSince(blockTs.get(k.firstBlock) ?? null, now), 7).period === "24h").map((k) => k.pool)),
+  ];
+  const bins24h = new Map<string, BinData | null>(
+    await Promise.all(youngPools.map(async (p) => [p, await fetchBins(chainId, pools.get(p)!.poolAddress, "24h")] as const)),
+  );
+
   const positions: PositionView[] = [];
   let closed = 0;
   for (const k of keys) {
-    const view = buildView(chainId, k, pools.get(k.pool)!, bins7d.get(k.pool) ?? null, userShares, binOnchain, blockTs.get(k.firstBlock) ?? null, now);
+    const view = buildView(
+      chainId,
+      k,
+      pools.get(k.pool)!,
+      bins7d.get(k.pool) ?? null,
+      bins24h.get(k.pool) ?? null,
+      userShares,
+      binOnchain,
+      blockTs.get(k.firstBlock) ?? null,
+      now,
+    );
     if (view.valueUsd > 0 || view.bins.some((b) => b.share > 0)) positions.push(view);
     else closed++;
   }
@@ -157,12 +175,20 @@ function buildView(
   chainId: number,
   k: PositionKey,
   pool: Pool,
-  data: BinData | null,
+  data7d: BinData | null,
+  data24h: BinData | null,
   userShares: Map<string, bigint>,
   onchain: Map<string, { total: bigint; b0: bigint; b1: bigint; lengthE6: number | null }>,
   firstTs: number | null,
   now: number,
 ): PositionView {
+  const ageDays = heldDaysSince(firstTs, now);
+  const plan = ratePlan(ageDays, data7d?.windowDays ?? 7);
+  // 24h rates for young positions when available; otherwise (or if the 24h request failed) 7d.
+  const use24h = plan.period === "24h" && data24h !== null;
+  const data = use24h ? data24h : data7d;
+  const ratePeriod: RatePeriod = use24h ? "24h" : "7d";
+  const capDays = use24h ? plan.capDays : (data7d?.windowDays ?? 7);
   const inputs: BinInput[] = k.bins.map((idx) => {
     const oc = onchain.get(`${k.pool}:${idx}`);
     const a = data ? data.bins[idx - data.minIdx] : undefined;
@@ -180,10 +206,9 @@ function buildView(
       pnlAprBps: inSpan && a?.hasData ? a.pnlAprBps : null,
     };
   });
-  // Same 7d window for fees and APRs; age from the first deposit's block timestamp, to the second.
+  // Same window for fees and APRs; age from the first deposit's block timestamp, to the second.
   const windowDays = data?.windowDays ?? 7;
-  const ageDays = heldDaysSince(firstTs, now);
-  const vb = valueBins(inputs, windowDays, ageDays);
+  const vb = valueBins(inputs, capDays, ageDays);
   const valueUsd = vb.reduce((s, b) => s + b.valueUsd, 0);
   const feesUsd = vb.reduce((s, b) => s + b.feesUsd, 0);
   const cal = calibrateScale(inputs, pool.token0.fiatPrice, pool.token1.fiatPrice);
@@ -218,9 +243,10 @@ function buildView(
     estNetUsd: estNetUsd(vb),
     heldDays: ageDays,
     status,
-    insights: insights({ bins: vb, curBinIdx, status, pnlUsd, pnlApprox: hodl.approx }),
+    insights: insights({ bins: vb, curBinIdx, status, pnlUsd, pnlApprox: hodl.approx, period: ratePeriod }),
     firstDepositTs: firstTs,
     windowDays,
+    ratePeriod,
     scale: { confirmed: cal.confirmed, impliedExp0: cal.impliedExp0, impliedExp1: cal.impliedExp1 },
   };
 }
@@ -246,6 +272,7 @@ export function summarize(positions: PositionView[]): PortfolioSummary {
     binsNetApr: weightedApr(all, (b) => b.pnlAprBps),
     estNetUsd: positions.some((p) => p.estNetUsd !== null) ? sum((p) => p.estNetUsd ?? 0) : null,
     heldDays,
+    ratePeriod: positions.length && positions.every((p) => p.ratePeriod === "24h") ? "24h" : positions.some((p) => p.ratePeriod === "24h") ? "mixed" : "7d",
     count: positions.length,
   };
 }
