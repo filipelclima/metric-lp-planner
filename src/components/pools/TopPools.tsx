@@ -1,6 +1,7 @@
 "use client";
 import { AnimatePresence, motion, useReducedMotion, type Variants } from "framer-motion";
 import Link from "next/link";
+import { tradeBadge } from "@/lib/activity";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { fmtApr, fmtUsd } from "@/lib/calc";
@@ -28,7 +29,7 @@ import { freezeTopSnapshot, makeShareId, today, topOgQuery, topSnapshotParams } 
 import { CHAINS } from "@/lib/types";
 import { useApi } from "@/lib/useApi";
 import { ShareMenu, type ShareLinks } from "../ShareMenu";
-import { Card, ChainBadge, ErrorNote, InfoTip, Segmented, Skeleton, TierBadge, TokenLogo } from "../ui";
+import { Card, ChainBadge, ErrorNote, InfoTip, NoTradesBadge, Segmented, Skeleton, TierBadge, TokenLogo } from "../ui";
 
 interface RankingResponse {
   rows: RankRow[];
@@ -374,6 +375,7 @@ function PairCell({ r, className = "" }: { r: RankRow; className?: string }) {
         {r.pair}
       </span>
       <ChainBadge chainId={r.chainId} />
+      <NoTradesBadge badge={tradeBadge(r.vol24h, r.feeApr)} />
     </span>
   );
 }

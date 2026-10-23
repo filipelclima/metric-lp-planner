@@ -354,3 +354,16 @@ export function writeCompareState(s: CompareState): string {
   q.set("cmp", encodeScenarios(s.scenarios));
   return q.toString();
 }
+
+// ---------- no-trade columns ----------
+
+/** Column warning when a scenario's pool had no trades in the data period. */
+export const noTradesColumnText = (period: string) => `No trades in the last ${period}: no fees to estimate`;
+
+/**
+ * Metrics that take part in best-value highlights and verdicts: a column whose pool had no trades in the
+ * data period drops out (its numbers are all ~0 and would otherwise "win" rows like price drag).
+ */
+export function comparableMetrics(list: (ScenarioMetrics | null)[], noTrades: boolean[]): (ScenarioMetrics | null)[] {
+  return list.map((m, i) => (noTrades[i] ? null : m));
+}

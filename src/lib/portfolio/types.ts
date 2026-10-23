@@ -43,6 +43,8 @@ export interface PositionView {
   binsNetApr: number | null;
   heldDays: number | null;
   status: RangeStatus;
+  /** The pool had no trades in the analytics window: the position earns nothing regardless of range. */
+  noTrades?: boolean;
   insights: Insight[];
   firstDepositTs: number | null;
   windowDays: number;

@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { fmtApr, fmtBinPct, fmtUsd, tickStep } from "@/lib/calc";
-import { STATUS_LABEL, depositAgeText, metricPoolUrl, replanUrl, type RangeStatus } from "@/lib/portfolio/model";
+import { NO_TRADES_LABEL, STATUS_LABEL, depositAgeText, metricPoolUrl, replanUrl, type RangeStatus } from "@/lib/portfolio/model";
 import type { PositionBinView, PositionView } from "@/lib/portfolio/types";
 import { Card, ChainBadge, InfoTip, TierBadge, TokenLogo } from "../ui";
 
@@ -40,7 +40,13 @@ export default function PositionCard({ p }: { p: PositionView }) {
             {age && <span className="font-sans">{` · ${age}`}</span>}
           </div>
         </div>
-        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLE[p.status]}`}>{STATUS_LABEL[p.status]}</span>
+        {p.noTrades ? (
+          <span className="rounded-full bg-warn/10 px-2.5 py-1 text-xs font-medium text-warn" title="No swaps in this pool during the analytics window.">
+            {NO_TRADES_LABEL}
+          </span>
+        ) : (
+          <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLE[p.status]}`}>{STATUS_LABEL[p.status]}</span>
+        )}
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">

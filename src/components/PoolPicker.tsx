@@ -5,7 +5,8 @@ import { TVL_FLOORS, TVL_LABEL, filterSortPools, poolApr, toggleSort, type AprPe
 import { CHAINS, type Pool } from "@/lib/types";
 import type { ApiState } from "@/lib/useApi";
 import type { PickerPrefsState } from "@/lib/usePickerPrefs";
-import { ChainBadge, ErrorNote, Segmented, Skeleton, TierBadge, TokenLogo, inputCls } from "./ui";
+import { tradeBadge } from "@/lib/activity";
+import { ChainBadge, ErrorNote, NoTradesBadge, Segmented, Skeleton, TierBadge, TokenLogo, inputCls } from "./ui";
 
 export const OPEN_PICKER_EVENT = "binwise:open-pool-picker";
 
@@ -17,19 +18,26 @@ interface Props {
   hasSelection: boolean;
   /** Sort / filters / APR period, owned by the page so they persist in its URL. */
   picker: PickerPrefsState;
+  /** Target for OPEN_PICKER_EVENT with a detail id; an event without detail opens every picker. */
+  pickerId?: string;
 }
 
-export default function PoolPicker({ list, selected, onSelect, hasSelection, picker }: Props) {
+export default function PoolPicker({ list, selected, onSelect, hasSelection, picker, pickerId }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [prefs, setPrefs] = picker;
 
   // Lets other UI (e.g. the "no trades" empty state) open the picker.
   useEffect(() => {
-    const show = () => setOpen(true);
+    const show = (e: Event) => {
+      const target = (e as CustomEvent<string | undefined>).detail;
+      if (target && target !== pickerId) return;
+      setOpen(true);
+      ref.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    };
     window.addEventListener(OPEN_PICKER_EVENT, show);
     return () => window.removeEventListener(OPEN_PICKER_EVENT, show);
-  }, []);
+  }, [pickerId]);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -163,6 +171,7 @@ export default function PoolPicker({ list, selected, onSelect, hasSelection, pic
                             <TokenLogo src={p.token1.logoUrl} symbol={p.token1.symbol} />
                           </span>
                           <span className="truncate font-medium">{p.pair}</span>
+                          <NoTradesBadge badge={tradeBadge(p.analytics24h?.volumeFiat, p.aprBps7d)} />
                           <span className="shrink-0 sm:hidden">
                             <ChainBadge chainId={p.chainId} />
                           </span>

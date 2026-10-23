@@ -16,6 +16,7 @@ import {
   groupPositions,
   hodlValue,
   insights,
+  poolHadNoTrades,
   rangeStatus,
   valueBins,
   weightedApr,
@@ -192,6 +193,7 @@ function buildView(
   const curBinIdx = data?.curBinIdx ?? pool.curBinIdx;
   const status = rangeStatus(held, curBinIdx);
   const pnlUsd = hodl.usd === null ? null : valueUsd - hodl.usd;
+  const noTrades = data !== null && poolHadNoTrades(data.bins);
   return {
     chainId,
     pool: pool.poolAddress,
@@ -218,7 +220,8 @@ function buildView(
     estNetUsd: estNetUsd(vb),
     heldDays: ageDays,
     status,
-    insights: insights({ bins: vb, curBinIdx, status, pnlUsd, pnlApprox: hodl.approx }),
+    noTrades,
+    insights: insights({ bins: vb, curBinIdx, status, pnlUsd, pnlApprox: hodl.approx, noTrades, windowDays }),
     firstDepositTs: firstTs,
     windowDays,
     scale: { confirmed: cal.confirmed, impliedExp0: cal.impliedExp0, impliedExp1: cal.impliedExp1 },

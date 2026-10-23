@@ -122,10 +122,10 @@ describe("highlights", () => {
       pool(1, { net: 1200, fee: 1500, vol: 10_000 }), // most efficient among non-negative net
       pool(2, { net: -400, fee: 9000, vol: 20_000 }), // the trap
       pool(3, { net: -50, fee: 3000, vol: 900_000 }), // highest vol/TVL but negative net: excluded
-      pool(4, { net: 3000, fee: 3100, vol: 0 }), // best fee-driven net; zero volume can't be "efficient"
+      pool(4, { net: 3000, fee: 3100, vol: 0 }), // best fee-driven net, but no trades in 24h: excluded from every card
     ].map(toRow);
     const h = highlights(rows);
-    expect(h.bestNet?.pair).toBe("T4/USDT");
+    expect(h.bestNet?.pair).toBe("T1/USDT");
     expect(h.trap?.pair).toBe("T2/USDT");
     expect(h.mostEfficient?.pair).toBe("T1/USDT");
   });

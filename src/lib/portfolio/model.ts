@@ -255,6 +255,12 @@ export const STATUS_LABEL: Record<RangeStatus, string> = {
   out: "Out of range — earning nothing",
 };
 
+/** Pill shown instead of the range status when the pool had no trades in the window. */
+export const NO_TRADES_LABEL = "No trades: earning nothing";
+
+/** True when nothing traded anywhere in the pool during the analytics window. */
+export const poolHadNoTrades = (bins: { volumeFiat: number }[]) => bins.length > 0 && bins.every((b) => !(b.volumeFiat > 0));
+
 // ---------- aggregates ----------
 
 /** Value-weighted APR (fraction) over bins with data; null if none. */
@@ -336,11 +342,21 @@ export function insights(args: {
   status: RangeStatus;
   pnlUsd: number | null;
   pnlApprox: boolean;
+  /** The pool had no trades in the window (see poolHadNoTrades). */
+  noTrades?: boolean;
+  windowDays?: number;
 }): Insight[] {
   const { bins, curBinIdx, status } = args;
   const held = bins.filter((b) => b.valueUsd > 0);
   const out: Insight[] = [];
   if (held.length === 0) return [{ tone: "info", text: "This position no longer holds liquidity in any bin." }];
+  if (args.noTrades) {
+    const w = args.windowDays !== undefined && args.windowDays < 6.5 ? `${args.windowDays < 2 ? `${Math.round(args.windowDays * 24)}h` : `${args.windowDays.toFixed(1)}d`}` : "7d";
+    out.push({
+      tone: "warn",
+      text: `Nobody traded in this pool in the last ${w}, so your liquidity earned no fees, in range or not. Fees only come from swaps; consider a more active pool.`,
+    });
+  }
   const lo = Math.min(...held.map((b) => b.idx));
   const hi = Math.max(...held.map((b) => b.idx));
 
@@ -352,7 +368,8 @@ export function insights(args: {
   else if (status === "edge")
     out.push({ tone: "warn", text: `Price sits at the edge of your range (#${curBinIdx}): one more move and the position stops earning.` });
 
-  const idle = held.filter((b) => b.aprBps !== null && b.aprBps < IDLE_APR_BPS);
+  // With no trades every bin is idle: the no-trades line above already says so.
+  const idle = args.noTrades ? [] : held.filter((b) => b.aprBps !== null && b.aprBps < IDLE_APR_BPS);
   for (const r of runs(idle.map((b) => b.idx)).slice(0, 2)) {
     const inRun = idle.filter((b) => b.idx >= r[0] && b.idx <= r[1]);
     const avg = inRun.reduce((s, b) => s + (b.aprBps ?? 0), 0) / inRun.length;

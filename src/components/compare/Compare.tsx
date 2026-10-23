@@ -8,6 +8,8 @@ import {
   MAX_SCENARIOS,
   SCENARIO_LABELS,
   bestPerRow,
+  comparableMetrics,
+  noTradesColumnText,
   computeScenario,
   readCompareState,
   resolveRanges,
@@ -24,12 +26,12 @@ import {
 } from "@/lib/compare";
 import type { Period, Pool, RawBinsResponse, Strategy } from "@/lib/types";
 import { compareOgQuery, compareSnapshotParams, freezeCompareSnapshot, makeShareId, today } from "@/lib/share";
-import { activePreset, tokenNeeds, widerRange } from "@/lib/rangeInputs";
+import { activePreset, hasVolume, tokenNeeds, widerRange } from "@/lib/rangeInputs";
 import { withPickerParams } from "@/lib/poolList";
 import { useApi } from "@/lib/useApi";
 import { usePickerPrefs, type PickerPrefsState } from "@/lib/usePickerPrefs";
 import { useApis } from "@/lib/useApis";
-import PoolPicker from "../PoolPicker";
+import PoolPicker, { OPEN_PICKER_EVENT } from "../PoolPicker";
 import { BinField, PresetPicker, flashCls, useFlash } from "../RangeControls";
 import { ShareMenu, type ShareLinks } from "../ShareMenu";
 import { Card, ChainBadge, ErrorNote, Field, InfoTip, Segmented, Skeleton, inputCls } from "../ui";
@@ -45,6 +47,10 @@ interface Resolved {
   pool: Pool | null;
   data: BinData | null;
   range: ResolvedRange | null;
+  /** The scenario's pool had no trades in the data period: the column shows a warning instead of numbers. */
+  noTrades: boolean;
+  /** The scenario's pool (for the 30d check). */
+  ref: { chainId: number; address: string } | null;
   metrics: ScenarioMetrics | null;
   loading: boolean;
   error: string | null;
@@ -101,19 +107,43 @@ export default function Compare() {
       return l.ref && l.data ? { scenario: sc, data: l.data, key: poolKey(l.ref.chainId, l.ref.address) } : null;
     }));
     return s.scenarios.map((sc, i) => {
-      const { pool, data, loading, error } = loaded[i];
+      const { ref, pool, data, loading, error } = loaded[i];
       const range = ranges[i];
       const metrics =
         data && pool && range && s.amount > 0
           ? computeScenario(data, range, sc.strategy, s.amount, s.days, { token0: pool.token0.fiatPrice, token1: pool.token1.fiatPrice })
           : null;
-      return { scenario: sc, label: SCENARIO_LABELS[i], color: SCENARIO_COLORS[i], range, pool, data, metrics, loading, error };
+      const noTrades = data !== null && !hasVolume(data);
+      return { scenario: sc, label: SCENARIO_LABELS[i], color: SCENARIO_COLORS[i], range, noTrades, ref, pool, data, metrics, loading, error };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s, metas, bins, list.data]);
-  const metrics = resolved.map((r) => r.metrics);
+  // No-trade columns drop out of highlights, verdicts, the APR chart and the share card.
+  const metrics = comparableMetrics(
+    resolved.map((r) => r.metrics),
+    resolved.map((r) => r.noTrades),
+  );
   const best = useMemo(() => bestPerRow(metrics), [metrics]);
   const verdictList = useMemo(() => verdictsWithDuplicates(metrics, resolved.map((r) => r.range)), [metrics, resolved]);
+
+  // "Use 30d data" is offered only when the pool did trade over 30d.
+  const noTradeRefs = s.period === "30d" ? [] : [...new Map(resolved.filter((r) => r.noTrades && r.ref).map((r) => [poolKey(r.ref!.chainId, r.ref!.address), r.ref!])).values()];
+  const url30d = (p: { chainId: number; address: string }) => `${metaUrl(p)}/bins?period=30d`;
+  const bins30 = useApis<RawBinsResponse>(noTradeRefs.map(url30d));
+  const noTradesCtx: NoTradesCtx = {
+    period: s.period,
+    has30d: (r) => {
+      if (s.period === "30d" || !r.ref) return false;
+      const raw = bins30.get(url30d(r.ref)).data;
+      try {
+        return !!raw && hasVolume(parseBins(raw));
+      } catch {
+        return false;
+      }
+    },
+    use30d: () => set({ period: "30d" }),
+    changePool: (i) => window.dispatchEvent(new CustomEvent(OPEN_PICKER_EVENT, { detail: s.scenarios[i]?.pool ? `scenario-${i}` : "compare-base" })),
+  };
   const basePool = resolved.find((r) => !r.scenario.pool)?.pool ?? (s.chain !== null && s.pool ? list.data?.pools.find((p) => p.poolAddress.toLowerCase() === s.pool!.toLowerCase()) ?? null : null);
   const baseData = resolved.find((r) => !r.scenario.pool && r.data)?.data ?? null;
   const overlays = resolved.flatMap((r) => (!r.scenario.pool && r.metrics ? [{ label: r.label, from: r.metrics.from, to: r.metrics.to, color: r.color }] : []));
@@ -140,14 +170,14 @@ export default function Compare() {
       days: s.days,
       date: today(),
       cols: resolved.flatMap((r) =>
-        r.metrics
+        r.metrics && !r.noTrades
           ? [{ from: r.metrics.from, to: r.metrics.to, feeApr: r.metrics.feeApr * 100, netApr: r.metrics.netApr === null ? null : r.metrics.netApr * 100, fees: r.metrics.feesSimple, pair: r.scenario.pool ? (r.pool?.pair ?? null) : null }]
           : [],
       ),
     });
     const origin = window.location.origin;
     const text = `Comparing LP ranges on ${basePool?.pair ?? "a Metric pool"} with Binwise: ${resolved
-      .flatMap((r) => (r.metrics ? [`${r.label} #${r.metrics.from}→#${r.metrics.to} fee ${fmtApr(r.metrics.feeApr)}${r.metrics.netApr !== null ? ` / net ${fmtApr(r.metrics.netApr)}` : ""}`] : []))
+      .flatMap((r) => (r.metrics && !r.noTrades ? [`${r.label} #${r.metrics.from}→#${r.metrics.to} fee ${fmtApr(r.metrics.feeApr)}${r.metrics.netApr !== null ? ` / net ${fmtApr(r.metrics.netApr)}` : ""}`] : []))
       .join(" · ")}`;
     return {
       link: `${origin}/compare?${qs}${snap ? `&${compareSnapshotParams(snap)}` : ""}&s=${makeShareId()}`,
@@ -173,7 +203,7 @@ export default function Compare() {
 
       <Card className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.7fr)_minmax(0,1fr)_minmax(0,0.8fr)]">
         <Field label="Pool">
-          <PoolPicker picker={picker} list={list} selected={basePool} hasSelection={!!s.pool} onSelect={(p) => set({ chain: p.chainId, pool: p.poolAddress })} />
+          <PoolPicker pickerId="compare-base" picker={picker} list={list} selected={basePool} hasSelection={!!s.pool} onSelect={(p) => set({ chain: p.chainId, pool: p.poolAddress })} />
         </Field>
         <AmountInput value={s.amount} onChange={(amount) => set({ amount })} />
         <DurationInput value={s.days} onChange={(days) => set({ days })} />
@@ -202,6 +232,7 @@ export default function Compare() {
               <ScenarioEditor
                 key={i}
                 r={r}
+                index={i}
                 list={list}
                 picker={picker}
                 canRemove={s.scenarios.length > 1}
@@ -237,7 +268,7 @@ export default function Compare() {
               <div className="mb-1 text-[11px] font-medium uppercase tracking-[0.08em] text-faint">Fee APR vs net APR</div>
               {metrics.some(Boolean) ? (
                 <AprBars
-                  items={resolved.flatMap((r) => (r.metrics ? [{ label: r.label, feeApr: r.metrics.feeApr, netApr: r.metrics.netApr, color: r.color }] : []))}
+                  items={resolved.flatMap((r) => (r.metrics && !r.noTrades ? [{ label: r.label, feeApr: r.metrics.feeApr, netApr: r.metrics.netApr, color: r.color }] : []))}
                   hovered={hovered}
                   onHover={setHovered}
                 />
@@ -247,8 +278,8 @@ export default function Compare() {
             </Card>
           </div>
 
-          <CompareTable resolved={resolved} best={best} verdictList={verdictList} days={s.days} hovered={hovered} onHover={setHovered} />
-          <MobileTabs resolved={resolved} best={best} verdictList={verdictList} days={s.days} tab={Math.min(tab, resolved.length - 1)} setTab={setTab} />
+          <CompareTable resolved={resolved} best={best} verdictList={verdictList} days={s.days} hovered={hovered} onHover={setHovered} noTrades={noTradesCtx} />
+          <MobileTabs resolved={resolved} best={best} verdictList={verdictList} days={s.days} noTrades={noTradesCtx} tab={Math.min(tab, resolved.length - 1)} setTab={setTab} />
 
           <p className="text-center text-[11px] text-faint">
             Estimates from the {s.period} window&apos;s per-bin fees and liquidity; net APR is historical (fees + price moves). Fees ≠ profit.
@@ -261,6 +292,7 @@ export default function Compare() {
 
 function ScenarioEditor({
   r,
+  index,
   list,
   picker,
   canRemove,
@@ -270,6 +302,7 @@ function ScenarioEditor({
   onRemove,
 }: {
   r: Resolved;
+  index: number;
   list: ReturnType<typeof useApi<{ pools: Pool[] }>>;
   picker: PickerPrefsState;
   canRemove: boolean;
@@ -359,6 +392,7 @@ function ScenarioEditor({
           </label>
           {otherPool && (
             <PoolPicker
+              pickerId={`scenario-${index}`}
               picker={picker}
               list={list}
               selected={sc.pool ? r.pool : null}
@@ -464,6 +498,7 @@ function CompareTable({
   days,
   hovered,
   onHover,
+  noTrades,
 }: {
   resolved: Resolved[];
   best: Record<MetricKey, number[]>;
@@ -471,7 +506,9 @@ function CompareTable({
   days: number;
   hovered: number | null;
   onHover: (i: number | null) => void;
+  noTrades: NoTradesCtx;
 }) {
+  const tableRows = rows(days);
   const flash = useFlash(resultsKey(resolved));
   return (
     <Card className={`hidden overflow-x-auto md:block ${flashCls(flash)}`}>
@@ -504,7 +541,7 @@ function CompareTable({
           </tr>
         </thead>
         <tbody>
-          {rows(days).map((row) => (
+          {tableRows.map((row, ri) => (
             <tr key={row.key} className="border-b border-line/40">
               <td className="px-4 py-2.5 text-[12px] text-muted">
                 <span className="flex items-center gap-1.5">
@@ -513,6 +550,13 @@ function CompareTable({
                 </span>
               </td>
               {resolved.map((r, i) => {
+                // A no-trade column is one warning cell spanning every row (verdict included).
+                if (r.noTrades)
+                  return ri === 0 ? (
+                    <td key={r.label} rowSpan={tableRows.length + 1} className="px-4 py-3 align-top">
+                      <NoTradesCard r={r} index={i} ctx={noTrades} />
+                    </td>
+                  ) : null;
                 const isBest = row.best ? best[row.best].includes(i) : false;
                 return (
                   <td
@@ -535,11 +579,13 @@ function CompareTable({
           ))}
           <tr>
             <td className="px-4 py-3 text-[12px] text-muted">Verdict</td>
-            {resolved.map((r, i) => (
-              <td key={r.label} className={`px-4 py-3 text-[13px] ${hovered === i ? "bg-surface-2/70" : ""}`} onMouseEnter={() => onHover(i)} onMouseLeave={() => onHover(null)}>
-                {verdictList[i] ?? "—"}
-              </td>
-            ))}
+            {resolved.map((r, i) =>
+              r.noTrades ? null : (
+                <td key={r.label} className={`px-4 py-3 text-[13px] ${hovered === i ? "bg-surface-2/70" : ""}`} onMouseEnter={() => onHover(i)} onMouseLeave={() => onHover(null)}>
+                  {verdictList[i] ?? "—"}
+                </td>
+              ),
+            )}
           </tr>
         </tbody>
       </table>
@@ -555,6 +601,7 @@ function MobileTabs({
   days,
   tab,
   setTab,
+  noTrades,
 }: {
   resolved: Resolved[];
   best: Record<MetricKey, number[]>;
@@ -562,6 +609,7 @@ function MobileTabs({
   days: number;
   tab: number;
   setTab: (i: number) => void;
+  noTrades: NoTradesCtx;
 }) {
   const r = resolved[tab];
   const flash = useFlash(resultsKey(resolved));
@@ -600,20 +648,28 @@ function MobileTabs({
               {rowTitle(r)}
               <RangeNote range={r.range} />
             </div>
-            <dl className="mt-3 space-y-2.5">
-              {rows(days).map((row) => {
-                const isBest = row.best ? best[row.best].includes(tab) : false;
-                return (
-                  <div key={row.key} className="flex items-start justify-between gap-3 text-sm">
-                    <dt className="text-[12px] text-muted">{row.label}</dt>
-                    <dd className={`num rounded-md px-1.5 text-right ${isBest ? "bg-accent/12 ring-1 ring-accent/40" : ""}`}>
-                      {r.metrics ? row.render(r.metrics, r) : r.loading ? <Skeleton className="h-4 w-16" /> : "—"}
-                    </dd>
-                  </div>
-                );
-              })}
-            </dl>
-            <p className="mt-3 border-t border-line/60 pt-3 text-[13px]">{verdictList[tab] ?? "—"}</p>
+            {r.noTrades ? (
+              <div className="mt-3">
+                <NoTradesCard r={r} index={tab} ctx={noTrades} />
+              </div>
+            ) : (
+              <>
+                <dl className="mt-3 space-y-2.5">
+                  {rows(days).map((row) => {
+                    const isBest = row.best ? best[row.best].includes(tab) : false;
+                    return (
+                      <div key={row.key} className="flex items-start justify-between gap-3 text-sm">
+                        <dt className="text-[12px] text-muted">{row.label}</dt>
+                        <dd className={`num rounded-md px-1.5 text-right ${isBest ? "bg-accent/12 ring-1 ring-accent/40" : ""}`}>
+                          {r.metrics ? row.render(r.metrics, r) : r.loading ? <Skeleton className="h-4 w-16" /> : "—"}
+                        </dd>
+                      </div>
+                    );
+                  })}
+                </dl>
+                <p className="mt-3 border-t border-line/60 pt-3 text-[13px]">{verdictList[tab] ?? "—"}</p>
+              </>
+            )}
             {resolved.length > 1 && <p className="mt-2 text-center text-[10px] text-faint">Swipe or tap the tabs to switch scenarios</p>}
           </Card>
         </motion.div>
@@ -686,6 +742,33 @@ const rowTitle = (r: Resolved) => (activePreset(r.scenario.range, r.data) === "w
 
 /** Changes whenever a scenario's results change, to flash the table. */
 const resultsKey = (list: Resolved[]) => list.map((r) => (r.metrics ? `${r.metrics.from}:${r.metrics.to}:${r.scenario.strategy}:${r.metrics.feeApr}` : "-")).join("|");
+
+interface NoTradesCtx {
+  period: Period;
+  has30d: (r: Resolved) => boolean;
+  use30d: () => void;
+  changePool: (i: number) => void;
+}
+
+/** Replaces a column's numbers when its pool had no trades in the data period. */
+function NoTradesCard({ r, index, ctx }: { r: Resolved; index: number; ctx: NoTradesCtx }) {
+  return (
+    <div role="status" className="rounded-xl bg-warn/10 p-3 text-[13px] text-warn ring-1 ring-warn/30">
+      <p className="font-medium">⚠ {noTradesColumnText(ctx.period)}</p>
+      <p className="mt-1 text-[12px] text-muted">{r.pool?.pair ?? "This pool"} had no swaps, so it earned no fees. This column is left out of the comparison.</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {ctx.has30d(r) && (
+          <button type="button" onClick={ctx.use30d} className="rounded-lg bg-accent/15 px-2.5 py-1 text-xs font-medium text-accent transition hover:bg-accent/25">
+            Use 30d data
+          </button>
+        )}
+        <button type="button" onClick={() => ctx.changePool(index)} className="rounded-lg bg-surface-2 px-2.5 py-1 text-xs text-text transition hover:bg-surface-3">
+          Change pool
+        </button>
+      </div>
+    </div>
+  );
+}
 
 /** Small note on a column: a manual duplicate ("Same range as B") or why a preset was widened. */
 function RangeNote({ range }: { range: ResolvedRange | null }) {

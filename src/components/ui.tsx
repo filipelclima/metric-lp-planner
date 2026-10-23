@@ -1,6 +1,7 @@
 "use client";
 import { AnimatePresence, animate, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { TRADE_BADGE_TITLE, type TradeBadge } from "@/lib/activity";
 import { TIER_LABEL } from "@/lib/risk";
 import { CHAINS, type Tier } from "@/lib/types";
 
@@ -312,5 +313,18 @@ export function Collapsible({
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+/** Small amber badge for pools with no trades (see lib/activity.ts). */
+export function NoTradesBadge({ badge }: { badge: TradeBadge | null }) {
+  if (!badge) return null;
+  return (
+    <span
+      title={TRADE_BADGE_TITLE[badge]}
+      className="inline-flex shrink-0 items-center whitespace-nowrap rounded bg-warn/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-warn"
+    >
+      {badge}
+    </span>
   );
 }

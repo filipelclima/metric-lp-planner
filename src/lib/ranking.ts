@@ -4,6 +4,7 @@
  * APRs are fractions (0.6 = 60%). Net APR is Metric's tradingPnlAprBps7d, which already INCLUDES fees
  * (fees + price moves), so the two are never added: price drag = fee APR − net APR.
  */
+import { tradeBadge } from "./activity";
 import type { Pool, Tier } from "./types";
 
 export interface RankRow {
@@ -152,7 +153,9 @@ function maxBy(rows: RankRow[], f: (r: RankRow) => number | null): RankRow | nul
   return best;
 }
 
-export function highlights(rows: RankRow[]): Highlights {
+/** Highlight cards skip pools with no trades (24h volume 0, see lib/activity.ts): nothing to recommend there. */
+export function highlights(all: RankRow[]): Highlights {
+  const rows = all.filter((r) => tradeBadge(r.vol24h, r.feeApr) === null);
   return {
     bestNet: maxBy(rows.filter(isFeeDriven), (r) => r.netApr),
     trap: maxBy(
