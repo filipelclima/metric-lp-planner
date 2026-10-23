@@ -4,6 +4,14 @@ One entry per task, newest first. Each entry lists what changed, what couldn't b
 
 ## Entries
 
+### 2026-10-23 · `73d4ee8` · Revert: 24h rates for young positions
+- **Changed:**
+  - Reverted `bfccd0a`. Fee and net estimates always use 7d bin rates again, with the "(from 7d rates)" labels and the single 7d analytics fetch.
+  - Added a regression test: a 1.19-day position on 7d rates over its whole holding time.
+- **Why:** In the owner's live check, 24h rates gave $1.01 / 220% against app.metric.xyz's realized Edge of ≈ $1.63 / 348.5%. The 7d rates gave $1.31 / 285%, which was closer.
+- **Couldn't test:** The live wallet (Metric is blocked in the sandbox). The figures above are from the owner's check.
+- **Review:** The 7d estimate is still ~20% below the app's realized Edge on that position.
+
 ### 2026-10-23 · `bfccd0a` · Portfolio: 24h rates for young positions
 - **Changed:**
   - Positions held less than 2 days take fee and net APR from the 24h bin analytics, applied over the whole holding time (capped at 2 days); otherwise 7d.
