@@ -9,6 +9,10 @@ import {
   idleBins,
   liquidityShare,
   resolveRange,
+  resolveRanges,
+  scenarioTitle,
+  verdictsWithDuplicates,
+  type Scenario,
   verdicts,
   volumeCovered,
   type ScenarioMetrics,
@@ -215,5 +219,79 @@ describe("compare page URL state", () => {
     const qs = writeCompareState({ ...d, scenarios: decodeScenarios("-3:1:u,-5:3:u,-8:6:c")! });
     expect(qs).toContain("cmp=-3%3A1%3Au%2C-5%3A3%3Au%2C-8%3A6%3Ac");
     expect(readCompareState(new URLSearchParams(qs)).scenarios).toHaveLength(3);
+  });
+});
+
+describe("distinct default ranges in concentrated pools", () => {
+  /** Same shape as the main fixture, with custom per-bin volume (bins -5..5, price at 0). */
+  const concentrated = (vol: number[]) =>
+    parseBins({ ...raw(), bins: raw().bins.map((b, i) => ({ ...b, token0: { ...b.token0, volumeFiat: vol[i] / 2 }, token1: { ...b.token1, volumeFiat: vol[i] / 2 } })) });
+  const items = (d: ReturnType<typeof parseBins>, list: Scenario[], keys?: string[]) => list.map((scenario, i) => ({ scenario, data: d, key: keys?.[i] ?? "56:0xpool" }));
+  const span = (r: { from: number; to: number } | null) => (r ? [r.from, r.to] : null);
+
+  it("90% and 95% presets coincide → C is B widened by 2 bins each side", () => {
+    const d = concentrated([0, 0, 0, 10, 1500, 8000, 480, 5, 5, 0, 0]); // bin 0 = 80%, bins -1..0 = 95%
+    expect(resolveRange(DEFAULT_SCENARIOS[1], d)).toEqual(resolveRange(DEFAULT_SCENARIOS[2], d)); // the live bug
+    const r = resolveRanges(items(d, DEFAULT_SCENARIOS));
+    expect(r.map(span)).toEqual([[0, 0], [-1, 0], [-3, 2]]);
+    expect(r[1]!.widened).toBe(0); // the real 90% preset is already strictly wider than A
+    expect(r[2]).toMatchObject({ widened: 2, widenedFrom: 1, sameAs: null });
+    expect(scenarioTitle(DEFAULT_SCENARIOS[2], r[2])).toBe("Wide (+2 bins each side)");
+    expect(scenarioTitle(DEFAULT_SCENARIOS[1], r[1])).toBe("Medium");
+    expect(new Set(r.map((x) => `${x!.from}:${x!.to}`)).size).toBe(3);
+  });
+
+  it("all three presets coincide → A, A ± 1, (A ± 1) ± 2; active bin stays inside", () => {
+    const d = concentrated([0, 0, 0, 0, 20, 9960, 20, 0, 0, 0, 0]);
+    const r = resolveRanges(items(d, DEFAULT_SCENARIOS));
+    expect(r.map(span)).toEqual([[0, 0], [-1, 1], [-3, 3]]);
+    expect(scenarioTitle(DEFAULT_SCENARIOS[1], r[1])).toBe("Medium (+1 bin each side)");
+    for (const x of r) expect(x!.from <= d.curBinIdx && d.curBinIdx <= x!.to).toBe(true);
+  });
+
+  it("keeps real presets when they're already strictly wider (normal pool)", () => {
+    const r = resolveRanges(items(data, DEFAULT_SCENARIOS));
+    expect(r.map(span)).toEqual(DEFAULT_SCENARIOS.map((s) => span(resolveRange(s, data))));
+    expect(r.every((x) => x!.widened === 0)).toBe(true);
+  });
+
+  it("a preset equal to an earlier manual range is widened 1 bin per side until distinct", () => {
+    const d = concentrated([0, 0, 0, 10, 1500, 8000, 480, 5, 5, 0, 0]);
+    const list: Scenario[] = [
+      { range: { kind: "manual", from: -1, to: 0 }, strategy: "uniform" },
+      { range: { kind: "manual", from: -2, to: 1 }, strategy: "uniform" },
+      { range: { kind: "preset", share: 90 }, strategy: "uniform" }, // preset gives -1..0 = A, then -2..1 = B
+    ];
+    const r = resolveRanges(items(d, list));
+    expect(span(r[2])).toEqual([-3, 2]);
+    expect(r[2]).toMatchObject({ widened: 2, widenedFrom: 0 });
+  });
+
+  it("different pools never collapse each other", () => {
+    const d = concentrated([0, 0, 0, 0, 20, 9960, 20, 0, 0, 0, 0]);
+    const r = resolveRanges(items(d, [DEFAULT_SCENARIOS[0], DEFAULT_SCENARIOS[0]], ["56:0xa", "56:0xb"]));
+    expect(r.map(span)).toEqual([[0, 0], [0, 0]]);
+    expect(r[1]!.sameAs).toBeNull();
+  });
+
+  it("manual duplicates get 'Same range as X' instead of repeated verdicts", () => {
+    const list: Scenario[] = [
+      { range: { kind: "manual", from: -1, to: 1 }, strategy: "uniform" },
+      { range: { kind: "manual", from: -1, to: 1 }, strategy: "uniform" },
+      { range: { kind: "manual", from: -5, to: 5 }, strategy: "uniform" },
+    ];
+    const r = resolveRanges(items(data, list));
+    expect(r.map((x) => x!.sameAs)).toEqual([null, 0, null]);
+    expect(span(r[1])).toEqual([-1, 1]); // manual picks are never moved
+    const m = r.map((x, i) => computeScenario(data, x!, list[i].strategy, 1000, 30, prices));
+    const v = verdictsWithDuplicates(m, r);
+    expect(v[1]).toBe("Same range as A");
+    expect(v[0]).toBe(verdicts([m[0], null, m[2]])[0]);
+  });
+
+  it("unloaded scenarios resolve to null and are skipped", () => {
+    const r = resolveRanges([null, { scenario: DEFAULT_SCENARIOS[1], data, key: "k" }]);
+    expect(r[0]).toBeNull();
+    expect(r[1]!.widened).toBe(0);
   });
 });

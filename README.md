@@ -49,6 +49,7 @@ Think *Poolfish (uniswap.fish) for Metric*.
 Up to three ranges (A, B, C) side by side for the same deposit, duration and data period. Open it from the planner's "Compare ranges" link; it starts with Narrow 80%, Medium 90% and Wide 95% of the window's volume.
 
 - Each scenario has its own start/end bin (or a preset) and distribution. "Different pool (same deposit)" compares pool vs pool.
+- **Distinct ranges**: in concentrated pools the presets can collapse (e.g. the 90% preset already covers 95% of volume). A 90/95% preset must come out strictly wider than the previous smaller preset; otherwise it's that range widened by 1 bin (90%) or 2 bins (95%) on each side, so the defaults become A = 80%, B = A ± 1, C = B ± 2. A preset still equal to an earlier range is widened by 1 bin per side until distinct, and labeled e.g. "Wide (+2 bins each side)". Manual ranges are never moved: a duplicate shows "Same range as B" instead of a repeated verdict.
 - **Table** (best value per row highlighted when values differ): range, volume covered, your share of liquidity, fee APR, est. fees (simple and compounded), net APR (historical) and net $, price drag (fee − net APR), tokens needed, idle bins, and a one-line verdict.
   - A bin is **idle** when it traded less than 0.1% of the window's volume.
   - Verdicts: highest fees (with a warning when it also covers the least volume), safest (most volume covered), best net, net negative, idle bins; "Balanced" otherwise.

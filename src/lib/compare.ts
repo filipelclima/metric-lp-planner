@@ -89,6 +89,87 @@ export function resolveRange(s: Scenario, data: BinData): { from: number; to: nu
   return presetRange(data, s.range.share / 100) ?? { from: data.curBinIdx - 5, to: data.curBinIdx + 5 };
 }
 
+export interface ResolvedRange {
+  from: number;
+  to: number;
+  /** Bins added on each side because the preset collapsed onto an earlier scenario (0 = as computed). */
+  widened: number;
+  /** Index of the earlier scenario this range was widened from. */
+  widenedFrom: number | null;
+  /** Index of an earlier scenario with the exact same range (and pool), for manual picks. */
+  sameAs: number | null;
+}
+
+/** Bins added on each side when a preset doesn't come out strictly wider than the previous preset. */
+const PRESET_STEP: Record<PresetShare, number> = { 80: 1, 90: 1, 95: 2 };
+
+const widen = (r: { from: number; to: number }, n: number) => ({ from: r.from - n, to: r.to + n });
+const sameRange = (a: { from: number; to: number }, b: { from: number; to: number }) => a.from === b.from && a.to === b.to;
+const strictlyWider = (r: { from: number; to: number }, a: { from: number; to: number }) => r.from <= a.from && r.to >= a.to && !sameRange(r, a);
+
+/**
+ * Resolves every scenario's range so presets never collapse in concentrated pools (where e.g. the 90% preset
+ * already covers 95% of volume):
+ * - a 90/95% preset must come out strictly wider than the closest earlier smaller preset on the same pool;
+ *   otherwise it's that range widened by 1 bin (90%) or 2 bins (95%) on each side. Defaults: A = 80%,
+ *   B = A ± 1, C = B ± 2 unless the real presets are already wider.
+ * - a preset still equal to an earlier range is widened by 1 bin per side until it's distinct.
+ *   Widening is symmetric, so the active bin stays inside.
+ * - manual ranges are kept as picked; an exact duplicate gets `sameAs` instead.
+ * `items[i]` is null when that scenario's data isn't loaded; `key` identifies its pool.
+ */
+export function resolveRanges(items: ({ scenario: Scenario; data: BinData; key: string } | null)[]): (ResolvedRange | null)[] {
+  const out: (ResolvedRange | null)[] = [];
+  items.forEach((it) => {
+    if (!it) {
+      out.push(null);
+      return;
+    }
+    const earlier = out.flatMap((r, j) => (r && items[j]!.key === it.key ? [{ r, j, sc: items[j]!.scenario }] : []));
+    const sc = it.scenario;
+    if (sc.range.kind === "manual") {
+      const dup = earlier.find((e) => sameRange(e.r, sc.range as { from: number; to: number }));
+      out.push({ from: sc.range.from, to: sc.range.to, widened: 0, widenedFrom: null, sameAs: dup ? dup.j : null });
+      return;
+    }
+    const share = sc.range.share;
+    let r = resolveRange(sc, it.data);
+    let widened = 0;
+    let widenedFrom: number | null = null;
+    const anchor = earlier
+      .filter((e) => e.sc.range.kind === "preset" && e.sc.range.share < share)
+      .sort((a, b) => (b.sc.range as { share: number }).share - (a.sc.range as { share: number }).share || b.j - a.j)[0];
+    if (anchor && !strictlyWider(r, anchor.r)) {
+      widened = PRESET_STEP[share];
+      widenedFrom = anchor.j;
+      r = widen(anchor.r, widened);
+    }
+    for (let dup = earlier.find((e) => sameRange(e.r, r)); dup; dup = earlier.find((e) => sameRange(e.r, r))) {
+      if (widenedFrom === null) widenedFrom = dup.j;
+      widened++;
+      r = widen(r, 1);
+    }
+    out.push({ from: r.from, to: r.to, widened, widenedFrom, sameAs: null });
+  });
+  return out;
+}
+
+/** Column title: preset name, plus the widening when a preset collapsed, e.g. "Wide (+1 bin each side)". */
+export function scenarioTitle(s: Scenario, r: ResolvedRange | null): string {
+  const name = scenarioName(s);
+  return r && r.widened > 0 ? `${name} (+${r.widened} bin${r.widened === 1 ? "" : "s"} each side)` : name;
+}
+
+/** Verdicts with duplicate ranges collapsed: a column repeating an earlier range gets "Same range as X". */
+export function verdictsWithDuplicates(list: (ScenarioMetrics | null)[], ranges: (ResolvedRange | null)[]): (string | null)[] {
+  const dupOf = (i: number) => ranges[i]?.sameAs ?? null;
+  const base = verdicts(list.map((m, i) => (dupOf(i) === null ? m : null)));
+  return list.map((m, i) => {
+    const d = dupOf(i);
+    return d !== null && m ? `Same range as ${SCENARIO_LABELS[d]}` : base[i];
+  });
+}
+
 const totalVolume = (data: BinData) => data.bins.reduce((a, b) => a + b.volumeFiat, 0);
 
 /** Share of the window's volume that traded inside [from, to]; null when the window has no volume. */

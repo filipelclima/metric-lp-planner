@@ -10,12 +10,14 @@ import {
   bestPerRow,
   computeScenario,
   readCompareState,
-  resolveRange,
+  resolveRanges,
   scenarioName,
-  verdicts,
+  scenarioTitle,
+  verdictsWithDuplicates,
   writeCompareState,
   type CompareState,
   type MetricKey,
+  type ResolvedRange,
   type PresetShare,
   type Scenario,
   type ScenarioMetrics,
@@ -38,6 +40,7 @@ interface Resolved {
   color: string;
   pool: Pool | null;
   data: BinData | null;
+  range: ResolvedRange | null;
   metrics: ScenarioMetrics | null;
   loading: boolean;
   error: string | null;
@@ -71,33 +74,39 @@ export default function Compare() {
   const metas = useApis<{ pool: Pool }>(poolsInPlay.map(metaUrl));
   const bins = useApis<RawBinsResponse>(poolsInPlay.map(binsUrl));
 
-  const resolved: Resolved[] = useMemo(
-    () =>
-      s.scenarios.map((sc, i) => {
-        const ref = sc.pool ?? (s.chain !== null && s.pool ? { chainId: s.chain, address: s.pool } : null);
-        const base = { scenario: sc, label: SCENARIO_LABELS[i], color: SCENARIO_COLORS[i] };
-        if (!ref) return { ...base, pool: null, data: null, metrics: null, loading: false, error: null };
-        const m = metas.get(metaUrl(ref));
-        const b = bins.get(binsUrl(ref));
-        const pool = m.data?.pool ?? list.data?.pools.find((p) => poolKey(p.chainId, p.poolAddress) === poolKey(ref.chainId, ref.address)) ?? null;
-        let data: BinData | null = null;
-        try {
-          data = b.data ? parseBins(b.data) : null;
-        } catch {
-          data = null;
-        }
-        const metrics =
-          data && pool && s.amount > 0
-            ? computeScenario(data, resolveRange(sc, data), sc.strategy, s.amount, s.days, { token0: pool.token0.fiatPrice, token1: pool.token1.fiatPrice })
-            : null;
-        return { ...base, pool, data, metrics, loading: b.loading || m.loading, error: b.error ?? m.error };
-      }),
+  const resolved: Resolved[] = useMemo(() => {
+    const loaded = s.scenarios.map((sc) => {
+      const ref = sc.pool ?? (s.chain !== null && s.pool ? { chainId: s.chain, address: s.pool } : null);
+      if (!ref) return { ref, pool: null, data: null, loading: false, error: null };
+      const m = metas.get(metaUrl(ref));
+      const b = bins.get(binsUrl(ref));
+      const pool = m.data?.pool ?? list.data?.pools.find((p) => poolKey(p.chainId, p.poolAddress) === poolKey(ref.chainId, ref.address)) ?? null;
+      let data: BinData | null = null;
+      try {
+        data = b.data ? parseBins(b.data) : null;
+      } catch {
+        data = null;
+      }
+      return { ref, pool, data, loading: b.loading || m.loading, error: b.error ?? m.error };
+    });
+    const ranges = resolveRanges(s.scenarios.map((sc, i) => {
+      const l = loaded[i];
+      return l.ref && l.data ? { scenario: sc, data: l.data, key: poolKey(l.ref.chainId, l.ref.address) } : null;
+    }));
+    return s.scenarios.map((sc, i) => {
+      const { pool, data, loading, error } = loaded[i];
+      const range = ranges[i];
+      const metrics =
+        data && pool && range && s.amount > 0
+          ? computeScenario(data, range, sc.strategy, s.amount, s.days, { token0: pool.token0.fiatPrice, token1: pool.token1.fiatPrice })
+          : null;
+      return { scenario: sc, label: SCENARIO_LABELS[i], color: SCENARIO_COLORS[i], range, pool, data, metrics, loading, error };
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [s, metas, bins, list.data],
-  );
+  }, [s, metas, bins, list.data]);
   const metrics = resolved.map((r) => r.metrics);
   const best = useMemo(() => bestPerRow(metrics), [metrics]);
-  const verdictList = useMemo(() => verdicts(metrics), [metrics]);
+  const verdictList = useMemo(() => verdictsWithDuplicates(metrics, resolved.map((r) => r.range)), [metrics, resolved]);
   const basePool = resolved.find((r) => !r.scenario.pool)?.pool ?? (s.chain !== null && s.pool ? list.data?.pools.find((p) => p.poolAddress.toLowerCase() === s.pool!.toLowerCase()) ?? null : null);
   const baseData = resolved.find((r) => !r.scenario.pool && r.data)?.data ?? null;
   const overlays = resolved.flatMap((r) => (!r.scenario.pool && r.metrics ? [{ label: r.label, from: r.metrics.from, to: r.metrics.to, color: r.color }] : []));
@@ -269,12 +278,13 @@ function ScenarioEditor({
             <span className="flex h-6 w-6 items-center justify-center rounded-md text-xs font-bold text-bg" style={{ background: r.color }}>
               {r.label}
             </span>
-            <span className="text-sm font-medium">{scenarioName(sc)}</span>
+            <span className="text-sm font-medium">{scenarioTitle(sc, r.range)}</span>
             {r.metrics && (
               <span className="num text-xs text-muted">
                 #{r.metrics.from} → #{r.metrics.to}
               </span>
             )}
+            <RangeNote range={r.range} />
           </span>
           {canRemove && (
             <button onClick={onRemove} aria-label={`Remove scenario ${r.label}`} className="rounded px-1.5 text-faint hover:bg-surface-2 hover:text-text">
@@ -447,7 +457,7 @@ function CompareTable({
 }) {
   return (
     <Card className="hidden overflow-x-auto md:block">
-      <table className="w-full min-w-[720px] text-sm">
+      <table className="w-full min-w-[720px] table-fixed text-sm">
         <thead>
           <tr className="border-b border-line/60">
             <th className="w-48 px-4 py-3" />
@@ -463,12 +473,13 @@ function CompareTable({
                   <span className="flex h-5 w-5 items-center justify-center rounded text-[11px] font-bold text-bg" style={{ background: r.color }}>
                     {r.label}
                   </span>
-                  <span className="font-medium">{scenarioName(r.scenario)}</span>
+                  <span className="font-medium">{scenarioTitle(r.scenario, r.range)}</span>
                   {r.scenario.pool && r.pool && (
                     <span className="flex items-center gap-1 text-xs text-muted">
                       · {r.pool.pair} <ChainBadge chainId={r.pool.chainId} />
                     </span>
                   )}
+                  <RangeNote range={r.range} />
                 </span>
               </th>
             ))}
@@ -564,8 +575,12 @@ function MobileTabs({
             if (info.offset.x > 60 && tab > 0) setTab(tab - 1);
           }}
         >
-          <Card className="p-4" >
+          <Card className="p-4">
             <div className="h-1 rounded-full" style={{ background: r.color }} />
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-sm font-medium">
+              {scenarioTitle(r.scenario, r.range)}
+              <RangeNote range={r.range} />
+            </div>
             <dl className="mt-3 space-y-2.5">
               {rows(days).map((row) => {
                 const isBest = row.best ? best[row.best].includes(tab) : false;
@@ -660,4 +675,17 @@ function BinInput({ label, value, onCommit }: { label: string; value: number | n
       <input value={text} inputMode="numeric" onChange={(e) => setText(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === "Enter" && commit()} className={inputCls} placeholder="#" />
     </label>
   );
+}
+
+/** Small note on a column: a manual duplicate ("Same range as B") or why a preset was widened. */
+function RangeNote({ range }: { range: ResolvedRange | null }) {
+  if (range?.sameAs != null) return <span className="rounded bg-warn/10 px-1.5 py-0.5 text-[11px] font-normal text-warn">Same range as {SCENARIO_LABELS[range.sameAs]}</span>;
+  if (range && range.widened > 0 && range.widenedFrom !== null)
+    return (
+      <InfoTip>
+        The preset gave the same or a narrower range than {SCENARIO_LABELS[range.widenedFrom]} (volume is concentrated in a few bins), so this is {SCENARIO_LABELS[range.widenedFrom]} widened by{" "}
+        {range.widened} bin{range.widened === 1 ? "" : "s"} on each side.
+      </InfoTip>
+    );
+  return null;
 }
