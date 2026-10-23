@@ -4,6 +4,20 @@ One entry per task, newest first. Each entry lists what changed, what couldn't b
 
 ## Entries
 
+### 2026-10-23 · `9ca462f` · Portfolio: fees and net from each bin's 7d APR
+- **Changed:**
+  - Est. fees = Σ value_b × aprBps_b/1e4 × heldDays/365, with heldDays capped at 7d. It previously used current share × window fees.
+  - Your fee APR is the value-weighted aprBps, consistent with the fee estimate.
+  - The net estimate uses pnlAprBps the same way, skipping nulls, and is shown next to "Bins' 7d net APR (pool)".
+  - Removed the "Bins' 7d fee APR (pool)" stat, since it now equals your fee APR.
+  - The label switches to "Est. fees (last 7d)" when a position is older than 7d.
+  - Tooltips now say "based on each bin's 7d APR".
+- **Couldn't test:** The live wallet (`rpc.metric.xyz` and `api.metric.xyz` are blocked in the sandbox). Verified only with unit tests and a local mock. Expected live result: ≈ $1.5 fees on the CRCLB/USDT wallet.
+- **Review:**
+  - The bin APR divides by 7d average liquidity. If the liquidity growth was mostly this wallet's own fresh deposit into thin bins, the estimate overstates.
+  - Bins without aprBps count as 0% for fees.
+  - Positions older than 7d show only the last 7d of fees.
+
 ### 2026-10-23 · `a919b6c` · Changelog and CLAUDE.md
 - **Changed:** Added `CHANGELOG.md`, with a backfill of earlier work below, and `CLAUDE.md` with the rule to append an entry after every task and push it with the code.
 - **Couldn't test:** Nothing (docs only).
