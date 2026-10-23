@@ -17,7 +17,7 @@ export default function ConfigPanel({ m }: { m: PlannerModel }) {
   return (
     <div className="space-y-5">
       <Field label="Pool">
-        <PoolPicker list={list} selected={pool} onSelect={m.selectPool} hasSelection={!!s.pool} />
+        <PoolPicker picker={m.picker} list={list} selected={pool} onSelect={m.selectPool} hasSelection={!!s.pool} />
         {meta.error && !pool && (
           <div className="mt-2">
             <ErrorNote message={meta.error} retryAfter={meta.retryAfter} onRetry={meta.retry} />

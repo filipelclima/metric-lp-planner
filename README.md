@@ -8,7 +8,10 @@ Think *Poolfish (uniswap.fish) for Metric*.
 
 ## Features
 
-- Searchable pool list across **Ethereum (1)**, **BNB Chain (56)** and **Robinhood Chain (4663)**, showing TVL, 7d APR and tier badge.
+- Searchable pool list across **Ethereum (1)**, **BNB Chain (56)** and **Robinhood Chain (4663)**, showing TVL, APR and tier badge.
+  - Sortable Pair / Chain / TVL / APR headers (click again to flip; ▲▼ shows the direction). Pools without an APR show "—" and always sort last.
+  - APR period 24h (`analytics24h.aprBps`) or **7d** (`aprBps7d`); TVL filter Any / **≥$10k** / ≥$100k / ≥$1M; chain filter.
+  - Remembered in the page URL (`psort`, `pdir`, `papr`, `ptvl`, `pchain`; only non-defaults, never in share links) and in localStorage. A URL with picker params wins over storage.
 - Deposit (USD), duration (30/60/90 days or custom) and data period (24h / **7d** / 30d).
 - Ranges:
   - **Auto presets**: the smallest contiguous bin range around the current bin that covers 80/90/95% of the period's volume.
@@ -199,6 +202,7 @@ src/lib/plan.ts        URL state + API data → range and estimate (shared by th
 src/lib/usePlanner.ts  client hook: URL sync, data fetching, derived estimate
 src/app/api/**         proxy route handlers + /api/og share image
 src/lib/rangeInputs.ts bin input parsing/clamping, preset summaries, Wider, tokens needed (pure)
+src/lib/poolList.ts    pool picker: sort, filters, APR period, URL/localStorage prefs (pure)
 src/lib/compare.ts     compare ranges: metrics, best per row, verdicts, cmp URL encoding (pure)
 src/lib/ranking.ts     top pools: rows, filters, sorting, highlights, weekly post (pure)
 src/lib/portfolio/     portfolio: ABIs, pure model (decoding, positions, value, HODL, status, insights), server loader

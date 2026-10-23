@@ -25,7 +25,9 @@ import {
 import type { Period, Pool, RawBinsResponse, Strategy } from "@/lib/types";
 import { compareOgQuery, compareSnapshotParams, freezeCompareSnapshot, makeShareId, today } from "@/lib/share";
 import { activePreset, tokenNeeds, widerRange } from "@/lib/rangeInputs";
+import { withPickerParams } from "@/lib/poolList";
 import { useApi } from "@/lib/useApi";
+import { usePickerPrefs, type PickerPrefsState } from "@/lib/usePickerPrefs";
 import { useApis } from "@/lib/useApis";
 import PoolPicker from "../PoolPicker";
 import { BinField, PresetPicker, flashCls, useFlash } from "../RangeControls";
@@ -56,11 +58,14 @@ export default function Compare() {
   const [hovered, setHovered] = useState<number | null>(null);
   const [tab, setTab] = useState(0);
 
+  const picker = usePickerPrefs(new URLSearchParams(params.toString()));
   const qs = writeCompareState(s);
+  // The page URL also remembers the pool picker's sort/filters (not part of share links).
+  const urlQs = withPickerParams(qs, picker[0]);
   useEffect(() => {
-    if (qs !== params.toString()) router.replace(`/compare?${qs}`, { scroll: false });
+    if (urlQs !== params.toString()) router.replace(`/compare?${urlQs}`, { scroll: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [qs]);
+  }, [urlQs]);
 
   const list = useApi<{ pools: Pool[] }>("/api/pools");
 
@@ -168,7 +173,7 @@ export default function Compare() {
 
       <Card className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.7fr)_minmax(0,1fr)_minmax(0,0.8fr)]">
         <Field label="Pool">
-          <PoolPicker list={list} selected={basePool} hasSelection={!!s.pool} onSelect={(p) => set({ chain: p.chainId, pool: p.poolAddress })} />
+          <PoolPicker picker={picker} list={list} selected={basePool} hasSelection={!!s.pool} onSelect={(p) => set({ chain: p.chainId, pool: p.poolAddress })} />
         </Field>
         <AmountInput value={s.amount} onChange={(amount) => set({ amount })} />
         <DurationInput value={s.days} onChange={(days) => set({ days })} />
@@ -198,6 +203,7 @@ export default function Compare() {
                 key={i}
                 r={r}
                 list={list}
+                picker={picker}
                 canRemove={s.scenarios.length > 1}
                 hot={hovered === i}
                 onHover={(h) => setHovered(h ? i : null)}
@@ -256,6 +262,7 @@ export default function Compare() {
 function ScenarioEditor({
   r,
   list,
+  picker,
   canRemove,
   hot,
   onHover,
@@ -264,6 +271,7 @@ function ScenarioEditor({
 }: {
   r: Resolved;
   list: ReturnType<typeof useApi<{ pools: Pool[] }>>;
+  picker: PickerPrefsState;
   canRemove: boolean;
   hot: boolean;
   onHover: (h: boolean) => void;
@@ -351,6 +359,7 @@ function ScenarioEditor({
           </label>
           {otherPool && (
             <PoolPicker
+              picker={picker}
               list={list}
               selected={sc.pool ? r.pool : null}
               hasSelection={!!sc.pool}

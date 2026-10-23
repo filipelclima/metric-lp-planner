@@ -6,6 +6,8 @@ import { computeEstimate, resolveRange } from "./plan";
 import type { Pool, RawBinsResponse } from "./types";
 import { readState, writeState, type PlannerState } from "./urlState";
 import { useApi } from "./useApi";
+import { withPickerParams } from "./poolList";
+import { usePickerPrefs } from "./usePickerPrefs";
 
 /** All page state: URL-synced inputs, API data and the derived estimate. */
 export function usePlanner() {
@@ -13,6 +15,7 @@ export function usePlanner() {
   const params = useSearchParams();
   const [s, setS] = useState<PlannerState>(() => readState(new URLSearchParams(params.toString())));
   const set = (patch: Partial<PlannerState>) => setS((p) => ({ ...p, ...patch }));
+  const picker = usePickerPrefs(new URLSearchParams(params.toString()));
 
   const list = useApi<{ pools: Pool[] }>("/api/pools");
   const base = s.chain !== null && s.pool ? `/api/pools/${s.chain}/${s.pool}` : null;
@@ -38,14 +41,16 @@ export function usePlanner() {
   const estimate = useMemo(() => computeEstimate(s, pool, binData, range, !!bins.error), [s, pool, binData, range, bins.error]);
 
   const qs = writeState(s, range);
+  // The page URL also remembers the pool picker's sort/filters (not part of share links).
+  const urlQs = withPickerParams(qs, picker[0]);
   useEffect(() => {
-    if (qs !== params.toString()) router.replace(`?${qs}`, { scroll: false });
+    if (urlQs !== params.toString()) router.replace(`?${urlQs}`, { scroll: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [qs]);
+  }, [urlQs]);
 
   const selectPool = (p: Pool) => set({ chain: p.chainId, pool: p.poolAddress, range: { kind: "preset", share: 90 } });
 
-  return { s, set, qs, list, meta, bins, pool, binData, curBinIdx, range, estimate, selectPool };
+  return { s, set, qs, picker, list, meta, bins, pool, binData, curBinIdx, range, estimate, selectPool };
 }
 
 export type PlannerModel = ReturnType<typeof usePlanner>;

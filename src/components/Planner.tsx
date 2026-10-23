@@ -23,7 +23,7 @@ export default function Planner() {
   return (
     <div className="grid gap-5 lg:grid-cols-[340px_minmax(0,1fr)] lg:items-start">
       {/* Desktop: sticky config column */}
-      <aside className="hidden space-y-3 lg:sticky lg:top-4 lg:block">
+      <aside className="hidden space-y-3 lg:sticky lg:top-4 lg:z-20 lg:block">
         <Card className="p-5">
           <ConfigPanel m={m} />
         </Card>
