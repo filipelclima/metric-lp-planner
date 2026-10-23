@@ -4,6 +4,7 @@ import { fetchJsonWithTimeout } from "@/lib/fetchTimeout";
 import { normalizePool } from "@/lib/normalize";
 import { computeEstimate, resolveRange } from "@/lib/plan";
 import { CHAINS, type Pool, type RawBinsResponse, type RawPool } from "@/lib/types";
+import { formatSnapshot, parseSnapshot, rawRange, snapshotRangeText, type Snapshot } from "@/lib/share";
 import { readState, type PlannerState } from "@/lib/urlState";
 
 export const runtime = "edge";
@@ -23,12 +24,16 @@ interface CardView {
   chain: string | null;
   plan: string;
   stats: { label: string; value: string; color: string }[] | null;
+  /** Set for snapshot cards: the date the numbers were captured. */
+  asOf?: string;
 }
 
 const shortAddr = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
 /**
  * 1200×630 share card for the plan in the URL (same params as the page).
+ * With valid snapshot params (see lib/share.ts) it renders those exact numbers without calling
+ * Metric — instant and identical to what the sharer saw. Otherwise it fetches live data.
  * Always answers 200 with a complete PNG: if Metric is slow or down it renders the plan without
  * numbers, and the image is rendered into a buffer first so a render error can never produce a
  * truncated body — crawlers get a fixed Content-Length.
@@ -39,11 +44,16 @@ export async function GET(req: Request) {
   let live = false;
   try {
     const s = readState(params);
-    const data = await loadData(s);
-    view = buildView(s, params.get("pair"), data.pool, data.binData, data.binsFailed);
+    const snap = parseSnapshot(params);
+    if (snap) {
+      view = snapshotView(s, rawRange(params), snap);
+    } else {
+      const data = await loadData(s);
+      view = buildView(s, data.pool, data.binData, data.binsFailed);
+    }
     live = view.stats !== null;
   } catch {
-    view = { pair: params.get("pair") ?? "Metric pool", chain: null, plan: "LP plan", stats: null };
+    view = { pair: "Metric pool", chain: null, plan: "LP plan", stats: null };
   }
 
   let png: ArrayBuffer;
@@ -88,7 +98,27 @@ async function loadData(s: PlannerState): Promise<{ pool: Pool | null; binData: 
   return { pool, binData, binsFailed: !binData };
 }
 
-function buildView(s: PlannerState, pairParam: string | null, pool: Pool | null, binData: BinData | null, binsFailed: boolean): CardView {
+const chainLabel = (s: PlannerState) => (s.chain !== null ? (CHAINS[s.chain]?.name ?? `Chain ${s.chain}`) : null);
+const poolLabel = (s: PlannerState) => (s.pool ? `Pool ${shortAddr(s.pool)}` : "Metric pool");
+
+/** Card from the sharer's frozen numbers; every value here passed parseSnapshot / readState. */
+function snapshotView(s: PlannerState, range: { from: number; to: number } | null, snap: Snapshot): CardView {
+  const f = formatSnapshot(snap);
+  const rangeText = range ? snapshotRangeText(range, snap.binWidthE6) : s.range.kind === "preset" ? `range covering ${s.range.share}% of volume` : "custom range";
+  return {
+    pair: snap.pair ?? poolLabel(s),
+    chain: chainLabel(s),
+    plan: `${fmtUsd(s.amount)} deposit · ${s.days} days · ${rangeText}`,
+    stats: [
+      { label: `Est. fees · ${s.days}d`, value: f.fees, color: COLORS.text },
+      { label: "Fee APR", value: f.feeApr, color: COLORS.accent },
+      { label: "Net APR (hist.)", value: f.netApr ?? "—", color: snap.netApr === null ? COLORS.faint : snap.netApr < 0 ? COLORS.bad : COLORS.good },
+    ],
+    asOf: f.asOf,
+  };
+}
+
+function buildView(s: PlannerState, pool: Pool | null, binData: BinData | null, binsFailed: boolean): CardView {
   const range = resolveRange(s, binData, binData?.curBinIdx ?? pool?.curBinIdx ?? 0);
   const rangeText =
     binData && range
@@ -102,8 +132,8 @@ function buildView(s: PlannerState, pairParam: string | null, pool: Pool | null,
   const fees = est ? projectFees(est.dailyFees, est.deposit, s.days).simple : null;
   const net = est?.netApr ?? null;
   return {
-    pair: pool?.pair ?? pairParam ?? (s.pool ? `Pool ${shortAddr(s.pool)}` : "Metric pool"),
-    chain: s.chain !== null ? (CHAINS[s.chain]?.name ?? `Chain ${s.chain}`) : null,
+    pair: pool?.pair ?? poolLabel(s),
+    chain: chainLabel(s),
     plan: `${fmtUsd(s.amount)} deposit · ${s.days} days · ${rangeText}`,
     stats:
       est && fees !== null
@@ -156,8 +186,9 @@ function Card({ view }: { view: CardView }) {
           <div style={{ display: "flex", fontSize: 40, color: COLORS.accent }}>→</div>
         </div>
       )}
-      <div style={{ display: "flex", fontSize: 18, color: COLORS.faint, marginTop: 28 }}>
-        Estimates from past data. Fees are not profit. Unofficial community tool, not affiliated with Metric.
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 18, color: COLORS.faint, marginTop: 28 }}>
+        <div style={{ display: "flex" }}>Estimates from past data. Fees are not profit. Unofficial, not affiliated with Metric.</div>
+        {view.asOf && <div style={{ display: "flex", color: COLORS.muted }}>as of {view.asOf}</div>}
       </div>
     </div>
   );

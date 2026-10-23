@@ -220,11 +220,14 @@ export function Popover({
   children,
   align = "right",
   label,
+  onOpen,
 }: {
   trigger: ReactNode;
   children: ReactNode;
   align?: "left" | "right";
   label: string;
+  /** Called each time the popover opens (before its content renders). */
+  onOpen?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -245,7 +248,10 @@ export function Popover({
         type="button"
         aria-expanded={open}
         aria-label={label}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          if (!open) onOpen?.();
+          setOpen(!open);
+        }}
         className="rounded-lg bg-surface-2 px-2.5 py-1.5 text-xs text-muted transition hover:bg-surface-3 hover:text-text"
       >
         {trigger}

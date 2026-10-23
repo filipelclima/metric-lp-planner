@@ -1,0 +1,166 @@
+/**
+ * Share snapshots: the exact numbers a user saw, frozen into the shared link so the card, the
+ * tweet text and the preview always match and /api/og can render without calling Metric.
+ *
+ * URL params (all strictly validated; any invalid param voids the whole snapshot):
+ *   sf  est. fees over the plan's duration, USD          e.g. 210.09
+ *   sa  fee APR, percent                                 e.g. 255.61
+ *   sn  net APR (historical), percent — optional         e.g. -11.49
+ *   sd  snapshot date, YYYY-MM-DD                        e.g. 2026-10-23
+ *   sp  pool pair (token symbols only) — optional        e.g. SKHYB/USDT
+ *   sw  bin width (lengthE6) when uniform — optional     e.g. 100
+ *   s   per-share id that makes each shared link unique (never part of the image URL)
+ */
+import { fmtApr, fmtPlanPct, fmtUsd } from "./calc";
+import { writeState, type PlannerState } from "./urlState";
+
+export interface Snapshot {
+  fees: number;
+  feeApr: number;
+  netApr: number | null;
+  date: string;
+  pair: string | null;
+  binWidthE6: number | null;
+}
+
+export const SHARE_ID_KEY = "s";
+export const SNAPSHOT_KEYS = ["sf", "sa", "sn", "sd", "sp", "sw"] as const;
+/** Bump to make X / Slack refetch share images they cached (including cached failures). */
+export const OG_VERSION = "2";
+
+const MAX_LEN = 24;
+const NUM = /^-?\d{1,10}(\.\d{1,4})?$/;
+const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const PAIR = /^[A-Za-z0-9.+_-]{1,12}\/[A-Za-z0-9.+_-]{1,12}$/;
+const MIN_DATE = Date.UTC(2024, 0, 1);
+
+type Params = { get(key: string): string | null };
+
+function num(raw: string, min: number, max: number): number | null {
+  if (raw.length > MAX_LEN || !NUM.test(raw)) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= min && n <= max ? n : null;
+}
+
+function date(raw: string, now: number): string | null {
+  const m = raw.length === 10 ? DATE.exec(raw) : null;
+  if (!m) return null;
+  const t = Date.UTC(+m[1], +m[2] - 1, +m[3]);
+  const d = new Date(t);
+  // Reject impossible dates (2026-02-31) and anything outside [2024-01-01, now + 2 days].
+  if (d.getUTCFullYear() !== +m[1] || d.getUTCMonth() !== +m[2] - 1 || d.getUTCDate() !== +m[3]) return null;
+  return t >= MIN_DATE && t <= now + 2 * 86400_000 ? raw : null;
+}
+
+/** Returns the snapshot if every present snapshot param is valid and the required ones exist; else null. */
+export function parseSnapshot(q: Params, now = Date.now()): Snapshot | null {
+  const sf = q.get("sf");
+  const sa = q.get("sa");
+  const sd = q.get("sd");
+  if (sf === null || sa === null || sd === null) return null;
+  const fees = num(sf, -1e9, 1e9);
+  const feeApr = num(sa, -1e6, 1e6);
+  const day = date(sd, now);
+  if (fees === null || feeApr === null || day === null) return null;
+
+  const sn = q.get("sn");
+  const netApr = sn === null ? null : num(sn, -1e6, 1e6);
+  if (sn !== null && netApr === null) return null;
+
+  const sp = q.get("sp");
+  if (sp !== null && (sp.length > 25 || !PAIR.test(sp))) return null;
+
+  const sw = q.get("sw");
+  const width = sw === null ? null : num(sw, 1, 1_000_000);
+  if (sw !== null && (width === null || !Number.isInteger(width))) return null;
+
+  return { fees, feeApr, netApr, date: day, pair: sp, binWidthE6: width };
+}
+
+const r2 = (v: number) => Math.round(v * 100) / 100;
+
+/** Snapshot params in a fixed order, values rounded to 2 decimals (what the card and tweet show). */
+export function snapshotParams(s: Snapshot): URLSearchParams {
+  const q = new URLSearchParams();
+  q.set("sf", r2(s.fees).toFixed(2));
+  q.set("sa", r2(s.feeApr).toFixed(2));
+  if (s.netApr !== null) q.set("sn", r2(s.netApr).toFixed(2));
+  q.set("sd", s.date);
+  if (s.pair) q.set("sp", s.pair);
+  if (s.binWidthE6 !== null) q.set("sw", String(s.binWidthE6));
+  return q;
+}
+
+/**
+ * Canonical og:image query for a plan: plan params (normalized, fixed order), then snapshot params,
+ * then v. The share id is deliberately excluded so every share of the same numbers hits one cache entry.
+ */
+export function ogImageQuery(s: PlannerState, range: { from: number; to: number } | null, snap: Snapshot | null): string {
+  const parts = [writeState(s, range)];
+  if (snap) parts.push(snapshotParams(snap).toString());
+  parts.push(`v=${OG_VERSION}`);
+  return parts.join("&");
+}
+
+/** from/to as written in a URL (both integers), for rebuilding the same og query on the server. */
+export function rawRange(q: Params): { from: number; to: number } | null {
+  const f = q.get("from");
+  const t = q.get("to");
+  if (f === null || t === null || !/^-?\d{1,6}$/.test(f) || !/^-?\d{1,6}$/.test(t)) return null;
+  return { from: Math.min(+f, +t), to: Math.max(+f, +t) };
+}
+
+/** 6 random [a-z0-9] chars. */
+export function makeShareId(rand: (n: number) => Uint8Array = (n) => crypto.getRandomValues(new Uint8Array(n))): string {
+  const abc = "abcdefghijklmnopqrstuvwxyz0123456789";
+  return Array.from(rand(6), (b) => abc[b % abc.length]).join("");
+}
+
+/** Local calendar date as YYYY-MM-DD. */
+export function today(d = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/** Display strings shared by the card and the tweet so they always match. */
+export function formatSnapshot(s: Snapshot) {
+  const fees = r2(s.fees);
+  const net = s.netApr === null ? null : r2(s.netApr);
+  return {
+    fees: `${fees < 0 ? "−" : "+"}${fmtUsd(Math.abs(fees))}`,
+    feeApr: fmtApr(r2(s.feeApr) / 100),
+    netApr: net === null ? null : fmtApr(net / 100),
+    asOf: new Date(`${s.date}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }),
+  };
+}
+
+/** Plan range label from a snapshot's uniform bin width, e.g. "#-3 (-0.025%) → #1 (+0.015%) · 5 bins". */
+export function snapshotRangeText(range: { from: number; to: number }, widthE6: number | null): string {
+  const n = range.to - range.from + 1;
+  if (widthE6 === null) return `bins #${range.from} → #${range.to} · ${n} bins`;
+  const mid = (i: number) => fmtPlanPct(((i + 0.5) * widthE6) / 1e4);
+  return `#${range.from} (${mid(range.from)}) → #${range.to} (${mid(range.to)}) · ${n} bins`;
+}
+
+/** Tweet text built from the same formatted values as the card. */
+export function shareText(s: Snapshot, days: number): string {
+  const f = formatSnapshot(s);
+  const pool = s.pair ?? "a Metric pool";
+  const net = f.netApr === null ? "" : ` · net APR ${f.netApr} (historical)`;
+  return `My LP plan for ${pool} on Binwise: est. ${f.fees} fees in ${days}d · fee APR ${f.feeApr}${net} (as of ${f.asOf})`;
+}
+
+/**
+ * Freezes live values into a snapshot that is guaranteed to pass parseSnapshot (what /api/og will
+ * accept): rounds to 2 decimals and drops optional fields that don't validate (e.g. an unusual pair
+ * symbol). Returns null if even the required numbers are out of range.
+ */
+export function freezeSnapshot(raw: Snapshot, now = Date.now()): Snapshot | null {
+  const tries: Snapshot[] = [raw, { ...raw, pair: null }, { ...raw, pair: null, binWidthE6: null }, { ...raw, pair: null, binWidthE6: null, netApr: null }];
+  for (const t of tries) {
+    if (![t.fees, t.feeApr, t.netApr ?? 0].every(Number.isFinite)) continue;
+    const parsed = parseSnapshot(snapshotParams(t), now);
+    if (parsed) return parsed;
+  }
+  return null;
+}

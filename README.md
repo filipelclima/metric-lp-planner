@@ -33,7 +33,13 @@ Think *Poolfish (uniswap.fish) for Metric*.
   - Built for crawlers: the route runs on the edge, and the Metric lookups share a 2s deadline. If Metric is slow or down, it still returns a 200 PNG with the plan and "Open to see live estimates".
   - Live cards are cached with `public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800`. Plan-only fallbacks are cached for 60s, so live numbers replace them quickly.
   - `htmlLimitedBots: /.*/` keeps og/twitter tags in `<head>` for every user agent. Bump `OG_VERSION` in `src/app/page.tsx` to make X refetch cached images.
-  - The image URL is canonical per plan: only plan params, normalized and in a fixed order, plus `v`. Tracking or cache-busting params on the page URL don't change it.
+  - **Snapshots**: clicking Share freezes the numbers on screen into the link:
+    - `sf` est. fees (USD), `sa` fee APR %, `sn` net APR %, `sd` date, plus optional `sp` pair and `sw` bin width.
+    - `/api/og` renders those exact values with no Metric call, and shows "as of …". The tweet text is built from the same formatted values.
+    - The page itself still recalculates live when opened.
+    - Snapshot params are strictly validated in `src/lib/share.ts`: numbers only, bounded ranges, real dates no later than today, token-symbol pairs. Any invalid value voids the snapshot, so the image can't be made to render arbitrary text.
+  - Every Share click adds a random `s=<6 chars>` so X treats it as a new URL. It is excluded from the og:image URL, which is canonical (normalized plan params, then snapshot params, then `v`).
+  - Opening the Share menu pre-warms that exact image URL, so Vercel's edge has it cached before X asks for it.
   - `npm run check-share -- https://your-deploy` simulates X's crawler: it checks the tags are in `<head>`, the image URL is absolute, and `/api/og` returns 200 `image/png` at 1200×630 for both HEAD and GET.
 - Motion: count-up numbers, staggered hero entrance, growing bars and an animated range overlay (framer-motion). All of it is disabled under `prefers-reduced-motion`.
 - Shareable URL, e.g. `?chain=56&pool=0x..&amount=1000&days=30&from=-8&to=7&strategy=uniform&period=7d`. A `preset=80|90|95` parameter keeps an auto preset live.
