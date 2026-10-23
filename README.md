@@ -60,7 +60,6 @@ Paste any wallet to see its Metric LP positions. It's read-only: no wallet conne
 - **Est. fees since deposit (from 7d rates)**: `Σ value_b × (aprBps_b / 10000) × heldDays / 365`.
   - `value_b = share_b × (reserveFiat0_b + reserveFiat1_b)`, with shares at the current block.
   - `heldDays` runs from the first deposit's block timestamp, capped at the 7d window. When the position is older than 7d, the label reads "last 7d".
-  - **Young positions (< 2 days held)** use the **24h** bin analytics instead, applied over the whole holding time (capped at 2 days), and are labelled "(from 24h rates)". Recent volume dominates a fresh position's fees. If the 24h request fails, the 7d rates are used.
   - Using Metric's own per-bin rate (fees ÷ the bin's 7d *average* liquidity) avoids undercounting when bin liquidity grew during the window. Current share × window fees would undercount there, because the current share is below the average share.
   - Caveat: if the growth was mostly your own fresh deposit, the average-liquidity rate can overstate.
 - **Your fee APR (7d)**: `Σ value_b × aprBps_b / Σ value_b`. It's consistent with the fee estimate (fees = APR × value × days / 365).

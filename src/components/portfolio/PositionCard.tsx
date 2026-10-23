@@ -46,14 +46,14 @@ export default function PositionCard({ p }: { p: PositionView }) {
       <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Stat label="Value" value={fmtUsd(p.valueUsd)} big />
         <Stat
-          label={p.ratePeriod === "7d" && p.heldDays !== null && p.heldDays > p.windowDays ? "Est. fees (last 7d)" : "Est. fees since deposit"}
-          sub={`from ${p.ratePeriod} rates`}
+          label={p.heldDays !== null && p.heldDays > p.windowDays ? "Est. fees (last 7d)" : "Est. fees since deposit"}
+          sub="from 7d rates"
           value={fmtUsd(p.feesUsd)}
           tip={FEES_TIP}
         />
         <Stat
           label="Your fee APR"
-          sub={p.ratePeriod}
+          sub="7d"
           value={fmtApr(p.yourFeeApr)}
           tone="text-accent"
           tip={APR_TIP}
@@ -63,7 +63,7 @@ export default function PositionCard({ p }: { p: PositionView }) {
       <ResultRow pnlUsd={p.pnlUsd} pnlApprox={p.pnlApprox} annualized={p.pnlAnnualized} tip={scaleTip(p)} />
 
       <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-[12px] text-faint">
-        <PoolStat label={`Bins' ${p.ratePeriod} net APR (pool)`} value={p.binsNetApr} estUsd={p.estNetUsd} signed tip={NET_TIP} />
+        <PoolStat label="Bins' 7d net APR (pool)" value={p.binsNetApr} estUsd={p.estNetUsd} signed tip={NET_TIP} />
       </div>
 
       <PositionStrip p={p} />
@@ -163,10 +163,10 @@ export function ResultRow({ pnlUsd, pnlApprox, annualized, tip }: { pnlUsd: numb
 }
 
 export const FEES_TIP =
-  "Based on each bin's 7d APR (24h APR while the position is younger than 2 days, when recent volume matters most): Σ your value in the bin × its fee APR × days held (capped at the 7d window, or 2 days on 24h rates) / 365. Uses Metric's own rate (fees ÷ the bin's average liquidity over the window), so it doesn't undercount when bin liquidity grew during the window. If the growth was mostly your own fresh deposit, it can overstate.";
-export const APR_TIP = "Each bin's fee APR (7d, or 24h for positions younger than 2 days), weighted by your value in it. Consistent with the fee estimate: fees = APR × value × days held / 365.";
+  "Based on each bin's 7d APR: Σ your value in the bin × its 7d fee APR × days held (capped at 7d) / 365. Uses Metric's own rate (fees ÷ the bin's 7d average liquidity), so it doesn't undercount when bin liquidity grew during the window. If the growth was mostly your own fresh deposit, it can overstate.";
+export const APR_TIP = "Each bin's 7d fee APR, weighted by your value in it. Consistent with the fee estimate: fees = APR × value × days held / 365.";
 export const NET_TIP =
-  "Metric's trading-PnL APR (fees + price moves; 7d, or 24h for positions younger than 2 days) of the bins you hold, weighted by your value; the $ figure applies it to your value over the time held. Pool history, not your result: see “Your result” for your PnL vs HODL.";
+  "Metric's 7d trading-PnL APR (fees + price moves) of the bins you hold, weighted by your value; the $ figure applies it to your value over the time held (capped at 7d). Pool history, not your result: see “Your result” for your PnL vs HODL.";
 
 export function PoolStat({ label, value, tip, signed, estUsd }: { label: string; value: number | null; tip: string; signed?: boolean; estUsd?: number | null }) {
   const tone = value === null ? "" : signed ? (value < 0 ? "text-bad/80" : "text-good/80") : "text-muted";
@@ -191,7 +191,7 @@ function netColor(bps: number | null): string {
   return bps < 0 ? `rgba(248,113,113,${a})` : `rgba(74,222,128,${a})`;
 }
 
-/** Mini bin strip: held bins lit, active bin ringed; hovering recolors by the rate window's net APR. */
+/** Mini bin strip: held bins lit, active bin ringed; hovering recolors by 7d net APR. */
 function PositionStrip({ p }: { p: PositionView }) {
   const [hover, setHover] = useState<number | null>(null);
   const [width, setWidth] = useState(600);
@@ -218,7 +218,7 @@ function PositionStrip({ p }: { p: PositionView }) {
     <div className="mt-5">
       <div className="mb-1.5 flex items-center justify-between text-[10px] uppercase tracking-[0.08em] text-faint">
         <span>Your bins</span>
-        <span className="normal-case tracking-normal">{netMode ? `colored by ${p.ratePeriod} net APR` : `hover to color by ${p.ratePeriod} net APR`}</span>
+        <span className="normal-case tracking-normal">{netMode ? "colored by 7d net APR" : "hover to color by 7d net APR"}</span>
       </div>
       <div ref={ref} className="relative" onMouseLeave={() => setHover(null)}>
         <div className="flex h-6 items-end gap-[2px]">
@@ -252,13 +252,13 @@ function PositionStrip({ p }: { p: PositionView }) {
             );
           })}
         </div>
-        {hover !== null && <StripTip idx={hover} b={hb} active={hover === p.curBinIdx} period={p.ratePeriod} />}
+        {hover !== null && <StripTip idx={hover} b={hb} active={hover === p.curBinIdx} />}
       </div>
     </div>
   );
 }
 
-function StripTip({ idx, b, active, period }: { idx: number; b: PositionBinView | undefined; active: boolean; period: string }) {
+function StripTip({ idx, b, active }: { idx: number; b: PositionBinView | undefined; active: boolean }) {
   return (
     <div className="num pointer-events-none absolute -top-2 right-0 z-10 -translate-y-full rounded-lg bg-surface-3 px-3 py-2 text-[11px] shadow-xl shadow-black/40">
       <div className="mb-1 flex items-center gap-2 font-sans">
@@ -270,9 +270,9 @@ function StripTip({ idx, b, active, period }: { idx: number; b: PositionBinView 
         <div className="grid grid-cols-[auto_auto] gap-x-3">
           <span className="font-sans text-faint">Your value</span>
           <span className="text-right">{fmtUsd(b.valueUsd)}</span>
-          <span className="font-sans text-faint">Fee APR {period}</span>
+          <span className="font-sans text-faint">Fee APR 7d</span>
           <span className="text-right text-accent">{fmtApr(b.aprBps === null ? null : b.aprBps / 1e4)}</span>
-          <span className="font-sans text-faint">Net APR {period}</span>
+          <span className="font-sans text-faint">Net APR 7d</span>
           <span className={`text-right ${b.pnlAprBps === null ? "text-faint" : b.pnlAprBps < 0 ? "text-bad" : "text-good"}`}>
             {fmtApr(b.pnlAprBps === null ? null : b.pnlAprBps / 1e4)}
           </span>

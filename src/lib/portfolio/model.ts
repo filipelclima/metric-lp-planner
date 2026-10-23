@@ -138,14 +138,14 @@ export interface BinValue {
 /**
  * Bin value = share × (reserve0Fiat + reserve1Fiat), share = userShares / totalShares at the current block.
  *
- * Est. fees = value × (aprBps / 1e4) × min(heldDays, capDays) / 365, i.e. Metric's own rate for the bin
+ * Est. fees = value × (aprBps / 1e4) × min(heldDays, windowDays) / 365, i.e. Metric's own 7d rate for the bin
  * (fees ÷ the bin's 7d *average* liquidity) applied to your current value. Unlike current share × window
  * fees, this doesn't undercount when the bin's liquidity grew during the window (current share < average
  * share). Caveat: if the growth was mostly your own fresh deposit, the bin's average-liquidity rate overstates
  * what you earned. Net uses pnlAprBps the same way. Bins without aprBps count as 0 fee APR.
  */
-export function valueBins(bins: BinInput[], capDays: number, positionAgeDays: number | null): BinValue[] {
-  const days = positionAgeDays === null ? capDays : Math.max(0, Math.min(positionAgeDays, capDays));
+export function valueBins(bins: BinInput[], windowDays: number, positionAgeDays: number | null): BinValue[] {
+  const days = positionAgeDays === null ? windowDays : Math.max(0, Math.min(positionAgeDays, windowDays));
   return bins.map((b) => {
     const share = shareOf(b.userShares, b.totalShares);
     const valueUsd = share * (b.reserve0Fiat + b.reserve1Fiat);
@@ -161,20 +161,6 @@ export function valueBins(bins: BinInput[], capDays: number, positionAgeDays: nu
       pnlAprBps: b.pnlAprBps,
     };
   });
-}
-
-/** Positions younger than this use 24h bin analytics (recent volume dominates their fees); older ones use 7d. */
-export const YOUNG_POSITION_DAYS = 2;
-export type RatePeriod = "24h" | "7d";
-
-/**
- * Which analytics window to take fee/net rates from, and for how many days to apply them.
- * Young positions (< 2 days, age known): 24h rates over the whole holding time (capped at 2 days, so a
- * 1.5-day position isn't cut to the 1-day window). Otherwise 7d rates, capped at the 7d window.
- */
-export function ratePlan(heldDays: number | null, windowDays7d: number): { period: RatePeriod; capDays: number } {
-  if (heldDays !== null && heldDays < YOUNG_POSITION_DAYS) return { period: "24h", capDays: YOUNG_POSITION_DAYS };
-  return { period: "7d", capDays: windowDays7d };
 }
 
 /** Σ est. net over bins with pnlAprBps (nulls skipped); null if no bin has one. */
@@ -350,11 +336,8 @@ export function insights(args: {
   status: RangeStatus;
   pnlUsd: number | null;
   pnlApprox: boolean;
-  /** Analytics window the bin APRs come from. */
-  period?: RatePeriod;
 }): Insight[] {
   const { bins, curBinIdx, status } = args;
-  const period = args.period ?? "7d";
   const held = bins.filter((b) => b.valueUsd > 0);
   const out: Insight[] = [];
   if (held.length === 0) return [{ tone: "info", text: "This position no longer holds liquidity in any bin." }];
@@ -373,7 +356,7 @@ export function insights(args: {
   for (const r of runs(idle.map((b) => b.idx)).slice(0, 2)) {
     const inRun = idle.filter((b) => b.idx >= r[0] && b.idx <= r[1]);
     const avg = inRun.reduce((s, b) => s + (b.aprBps ?? 0), 0) / inRun.length;
-    out.push({ tone: "warn", text: `${binLabel(r)} had ~${pct(avg)} APR in ${period}: liquidity there is idle.` });
+    out.push({ tone: "warn", text: `${binLabel(r)} had ~${pct(avg)} APR in 7d: liquidity there is idle.` });
   }
 
   const worst = held.filter((b) => b.pnlAprBps !== null && b.pnlAprBps < BAD_NET_BPS).sort((a, b) => a.pnlAprBps! - b.pnlAprBps!)[0];

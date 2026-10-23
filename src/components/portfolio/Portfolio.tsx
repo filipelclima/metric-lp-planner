@@ -14,7 +14,6 @@ import { Card, CountUp, ErrorNote, InfoTip, Segmented, Skeleton, inputCls } from
 import PositionCard, { APR_TIP, FEES_TIP, NET_TIP, PoolStat, ResultRow } from "./PositionCard";
 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
-const RATE_LABEL = { "24h": "24h", "7d": "7d", mixed: "24h/7d" } as const;
 /** Optional demo wallet, configured per deploy (never committed). */
 const EXAMPLE_WALLET = process.env.NEXT_PUBLIC_EXAMPLE_WALLET;
 
@@ -161,7 +160,7 @@ function Results({ data, onRetry }: { data: PortfolioResponse; onRetry: () => vo
         </>
       )}
       <p className="text-center text-[11px] text-faint">
-        Values use Metric&apos;s current bin reserves; fees and APRs use 7d bin rates (24h for positions younger than 2 days). Updated{" "}
+        Values use Metric&apos;s current bin reserves; fees and APRs use the last {Math.round(data.positions[0]?.windowDays ?? 7)}d. Updated{" "}
         {new Date(data.generatedAt).toLocaleTimeString()} · Fees ≠ profit.
       </p>
     </motion.div>
@@ -202,12 +201,12 @@ function SummaryHero({ data }: { data: PortfolioResponse }) {
       </div>
       <div className="mt-5 grid grid-cols-2 gap-4">
         <HeroStat
-          label={`Est. fees since deposit (from ${RATE_LABEL[s.ratePeriod]} rates)`}
+          label="Est. fees since deposit (from 7d rates)"
           tip={FEES_TIP}
         >
           <CountUp value={s.feesUsd} format={(v) => fmtUsd(v)} />
         </HeroStat>
-        <HeroStat label={`Your fee APR (${RATE_LABEL[s.ratePeriod]})`} tip={APR_TIP}>
+        <HeroStat label="Your fee APR (7d)" tip={APR_TIP}>
           <span className="num text-accent">{fmtApr(s.yourFeeApr)}</span>
         </HeroStat>
       </div>
@@ -218,7 +217,7 @@ function SummaryHero({ data }: { data: PortfolioResponse }) {
         tip="Current value minus what the net deposited tokens would be worth today; annualized over the (HODL-weighted) time held, shown after 1 day. Approximate when deposit units can't be calibrated against onchain bin balances."
       />
       <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-[12px] text-faint">
-        <PoolStat label={`Bins' ${RATE_LABEL[s.ratePeriod]} net APR (pool)`} value={s.binsNetApr} estUsd={s.estNetUsd} signed tip={NET_TIP} />
+        <PoolStat label="Bins' 7d net APR (pool)" value={s.binsNetApr} estUsd={s.estNetUsd} signed tip={NET_TIP} />
       </div>
     </Card>
   );

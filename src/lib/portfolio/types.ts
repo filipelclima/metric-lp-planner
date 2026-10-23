@@ -1,5 +1,5 @@
 import type { Tier } from "../types";
-import type { Insight, RangeStatus, RatePeriod } from "./model";
+import type { Insight, RangeStatus } from "./model";
 
 export interface PositionBinView {
   idx: number;
@@ -46,8 +46,6 @@ export interface PositionView {
   insights: Insight[];
   firstDepositTs: number | null;
   windowDays: number;
-  /** Analytics window the fee/net rates come from: 24h for positions younger than 2 days, else 7d. */
-  ratePeriod: RatePeriod;
   scale: { confirmed: boolean; impliedExp0: number | null; impliedExp1: number | null };
 }
 
@@ -63,7 +61,6 @@ export interface PortfolioSummary {
   estNetUsd: number | null;
   /** HODL-weighted average holding time. */
   heldDays: number | null;
-  ratePeriod: RatePeriod | "mixed";
   count: number;
 }
 
