@@ -1,7 +1,7 @@
 "use client";
 import { AnimatePresence, motion, useReducedMotion, type Variants } from "framer-motion";
-import { useMemo, useState } from "react";
-import { CartesianGrid, Line, LineChart, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CartesianGrid, Customized, Line, LineChart, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   bpsToFraction,
   fmtAmount,
@@ -13,6 +13,7 @@ import {
   poolDailyFees,
   poolWindowDailyFees,
   projectFees,
+  tickStep,
   type BinData,
   type Estimate,
 } from "@/lib/calc";
@@ -121,8 +122,8 @@ export default function Hero({ m, onOpenRisk }: { m: PlannerModel; onOpenRisk: (
               right={
                 <span className="flex items-center gap-3 text-[11px] text-muted">
                   <Legend color="var(--accent)" label="Fees" />
-                  <Legend color="var(--accent)" label="Compounded" dashed />
-                  {estimate.netDaily !== null && <Legend color={estimate.netDaily < 0 ? "var(--bad)" : "var(--good)"} label="Net" />}
+                  <Legend color="var(--accent)" label="Compounded" dash="dashed" />
+                  {estimate.netDaily !== null && <Legend color={netLineColor(estimate.netDaily)} label="Net" dash="dotted" />}
                 </span>
               }
             >
@@ -193,39 +194,50 @@ function BarRow({ label, value, width, color }: { label: string; value: string; 
   );
 }
 
-function Legend({ color, label, dashed }: { color: string; label: string; dashed?: boolean }) {
+function Legend({ color, label, dash = "solid" }: { color: string; label: string; dash?: "solid" | "dashed" | "dotted" }) {
   return (
     <span className="flex items-center gap-1.5">
-      <span className="h-0 w-3 border-t-2" style={{ borderColor: color, borderStyle: dashed ? "dashed" : "solid", opacity: dashed ? 0.7 : 1 }} />
+      <span className="h-0 w-3.5 border-t-2" style={{ borderColor: color, borderStyle: dash }} />
       {label}
     </span>
   );
 }
 
+type ProjPoint = { d: number; simple: number; compounded: number; net: number | null };
+
+const NET_NEUTRAL = "#e8ecf2";
+/** Net line style: neutral dashed, amber when negative — clearly distinct from the teal fee lines. */
+export const netLineColor = (netDaily: number | null) => (netDaily !== null && netDaily < 0 ? "var(--warn)" : NET_NEUTRAL);
+
+function projectAt(estimate: Estimate, d: number): ProjPoint {
+  const p = projectFees(estimate.dailyFees, estimate.deposit, d);
+  return { d, simple: p.simple, compounded: p.compounded, net: estimate.netDaily === null ? null : estimate.netDaily * d };
+}
+
 function ProjectionChart({ estimate, days }: { estimate: Estimate; days: number }) {
   const reduced = useReducedMotion();
+  const [hovering, setHovering] = useState(false);
   const maxDays = Math.max(90, days);
   const data = useMemo(() => {
     const step = Math.max(1, Math.ceil(maxDays / 120));
-    const out = [];
-    for (let d = 0; d <= maxDays; d += step) {
-      const p = projectFees(estimate.dailyFees, estimate.deposit, d);
-      out.push({ d, simple: p.simple, compounded: p.compounded, net: estimate.netDaily === null ? null : estimate.netDaily * d });
-    }
-    if (out[out.length - 1].d !== maxDays) {
-      const p = projectFees(estimate.dailyFees, estimate.deposit, maxDays);
-      out.push({ d: maxDays, simple: p.simple, compounded: p.compounded, net: estimate.netDaily === null ? null : estimate.netDaily * maxDays });
-    }
+    const out: ProjPoint[] = [];
+    for (let d = 0; d <= maxDays; d += step) out.push(projectAt(estimate, d));
+    if (out[out.length - 1].d !== maxDays) out.push(projectAt(estimate, maxDays));
     return out;
   }, [estimate, maxDays]);
-  const at = projectFees(estimate.dailyFees, estimate.deposit, days).simple;
-  const netColor = estimate.netDaily !== null && estimate.netDaily < 0 ? "var(--bad)" : "var(--good)";
+  const at = projectAt(estimate, days);
+  const netColor = netLineColor(estimate.netDaily);
   const ticks = [...new Set([0, 30, 60, 90, days, maxDays])].filter((t) => t <= maxDays).sort((a, b) => a - b);
 
   return (
     <div className="h-[168px]">
       <ResponsiveContainer>
-        <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+        <LineChart
+          data={data}
+          margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
+          onMouseMove={(e) => setHovering(!!(e as { isTooltipActive?: boolean } | null)?.isTooltipActive)}
+          onMouseLeave={() => setHovering(false)}
+        >
           <CartesianGrid vertical={false} stroke="var(--line)" strokeOpacity={0.6} />
           <XAxis
             dataKey="d"
@@ -245,21 +257,76 @@ function ProjectionChart({ estimate, days }: { estimate: Estimate; days: number 
             tickFormatter={(v) => fmtUsd(v, { compact: true }).replace(".00", "")}
           />
           <ReferenceLine y={0} stroke="var(--faint)" strokeOpacity={0.5} />
-          <Tooltip content={<ProjTip />} cursor={{ stroke: "var(--faint)", strokeDasharray: "3 3" }} />
+          <Tooltip content={<ProjTip />} cursor={{ stroke: "var(--faint)", strokeDasharray: "3 3" }} isAnimationActive={false} />
           <Line dataKey="simple" stroke="var(--accent)" strokeWidth={2} dot={false} isAnimationActive={!reduced} animationDuration={600} />
-          <Line dataKey="compounded" stroke="var(--accent)" strokeOpacity={0.6} strokeDasharray="4 3" strokeWidth={1.5} dot={false} isAnimationActive={!reduced} animationDuration={600} />
+          <Line dataKey="compounded" stroke="var(--accent)" strokeOpacity={0.7} strokeDasharray="5 3" strokeWidth={1.5} dot={false} isAnimationActive={!reduced} animationDuration={600} />
           {estimate.netDaily !== null && (
-            <Line dataKey="net" stroke={netColor} strokeWidth={1.5} dot={false} isAnimationActive={!reduced} animationDuration={600} />
+            <Line dataKey="net" stroke={netColor} strokeOpacity={0.85} strokeDasharray="2 3" strokeWidth={1.5} dot={false} isAnimationActive={!reduced} animationDuration={600} />
           )}
           <ReferenceLine x={days} stroke="var(--text)" strokeOpacity={0.35} strokeDasharray="2 3" />
-          <ReferenceDot x={days} y={at} r={4} fill="var(--accent)" stroke="var(--bg)" strokeWidth={2} />
+          <ReferenceDot x={days} y={at.simple} r={4} fill="var(--accent)" stroke="var(--bg)" strokeWidth={2} />
+          {estimate.netDaily !== null && at.net !== null && (
+            <ReferenceDot x={days} y={at.net} r={3} fill={netColor} stroke="var(--bg)" strokeWidth={2} />
+          )}
+          {!hovering && <Customized component={<MarkerCallout point={at} netColor={netColor} />} />}
         </LineChart>
       </ResponsiveContainer>
     </div>
   );
 }
 
-function ProjTip({ active, payload }: { active?: boolean; payload?: { payload: { d: number; simple: number; compounded: number; net: number | null } }[] }) {
+interface ScaleAxis {
+  scale: (v: number) => number;
+}
+
+/** Default callout at the selected-duration marker: fees / compounded / net at that day. Hidden while hovering. */
+function MarkerCallout(props: {
+  point: ProjPoint;
+  netColor: string;
+  xAxisMap?: Record<string, ScaleAxis>;
+  yAxisMap?: Record<string, ScaleAxis>;
+  offset?: { top: number; left: number; width: number; height: number };
+}) {
+  const xAxis = props.xAxisMap && Object.values(props.xAxisMap)[0];
+  const yAxis = props.yAxisMap && Object.values(props.yAxisMap)[0];
+  if (!xAxis || !yAxis || !props.offset) return null;
+  const { point: p } = props;
+  const rows: [string, string, string][] = [
+    ["Fees", fmtUsd(p.simple), "var(--accent)"],
+    ["Compounded", fmtUsd(p.compounded), "var(--text)"],
+  ];
+  if (p.net !== null) rows.push(["Net", signedUsd(p.net), props.netColor]);
+  const w = 138;
+  const h = 18 + rows.length * 14;
+  const mx = xAxis.scale(p.d);
+  const my = yAxis.scale(p.simple);
+  const { left, top, width, height } = props.offset;
+  // Prefer up-and-right of the marker; flip/clamp to stay inside the plot.
+  let x = mx + 10;
+  if (x + w > left + width) x = mx - 10 - w;
+  x = Math.max(left + 2, x);
+  const y = Math.max(top + 2, Math.min(my - h - 8, top + height - h - 2));
+  return (
+    <g pointerEvents="none" fontSize={10}>
+      <rect x={x} y={y} width={w} height={h} rx={6} fill="#1e232c" fillOpacity={0.95} />
+      <text x={x + 9} y={y + 13} fill="var(--muted)" fontFamily="var(--font-sans)">
+        Day {p.d}
+      </text>
+      {rows.map(([label, value, color], i) => (
+        <g key={label}>
+          <text x={x + 9} y={y + 27 + i * 14} fill="var(--faint)" fontFamily="var(--font-sans)">
+            {label}
+          </text>
+          <text x={x + w - 9} y={y + 27 + i * 14} fill={color} textAnchor="end" fontFamily="var(--font-mono)">
+            {value}
+          </text>
+        </g>
+      ))}
+    </g>
+  );
+}
+
+function ProjTip({ active, payload }: { active?: boolean; payload?: { payload: ProjPoint }[] }) {
   if (!active || !payload?.length) return null;
   const r = payload[0].payload;
   return (
@@ -273,7 +340,7 @@ function ProjTip({ active, payload }: { active?: boolean; payload?: { payload: {
         {r.net !== null && (
           <>
             <span className="font-sans text-faint">Net</span>
-            <span className={`text-right ${r.net < 0 ? "text-bad" : "text-good"}`}>{signedUsd(r.net)}</span>
+            <span className={`text-right ${r.net < 0 ? "text-warn" : "text-text"}`}>{signedUsd(r.net)}</span>
           </>
         )}
       </div>
@@ -284,6 +351,15 @@ function ProjTip({ active, payload }: { active?: boolean; payload?: { payload: {
 /** Visual ruler of mini bins around the active bin, the plan line, Copy, and the tokens needed. */
 function BinPlanStrip({ pool, data, from, to, estimate }: { pool: Pool; data: BinData; from: number; to: number; estimate: Estimate }) {
   const [copied, setCopied] = useState(false);
+  const rulerRef = useRef<HTMLDivElement>(null);
+  const [rulerWidth, setRulerWidth] = useState(600);
+  useEffect(() => {
+    const el = rulerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setRulerWidth(e.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const cur = data.curBinIdx;
   const span = Math.max(to, cur) - Math.min(from, cur) + 1;
   const pad = span > 60 ? 1 : span > 30 ? 2 : 4;
@@ -291,6 +367,8 @@ function BinPlanStrip({ pool, data, from, to, estimate }: { pool: Pool; data: Bi
   const hi = Math.max(to, cur) + pad;
   const cells = [];
   for (let i = lo; i <= hi; i++) cells.push(i);
+  // ~22px per label ("-10" in 9px mono plus breathing room).
+  const labelStep = tickStep(cells.length, rulerWidth / 22);
 
   const summary = planText(data, from, to).split("\n")[2].replace(/ · active bin #-?\d+$/, "");
   const line = `#${from} (${fmtPlanPct(getBin(data, from).midPct)}) → #${to} (${fmtPlanPct(getBin(data, to).midPct)}) · ${summary}`;
@@ -310,7 +388,7 @@ function BinPlanStrip({ pool, data, from, to, estimate }: { pool: Pool; data: Bi
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
       <div className="min-w-0">
         <SectionLabel>Bin plan</SectionLabel>
-        <div className="relative" aria-label={`Bins ${from} to ${to}, active bin ${cur}`}>
+        <div ref={rulerRef} className="relative pb-3" aria-label={`Bins ${from} to ${to}, active bin ${cur}`}>
           <div className="flex h-7 items-end gap-[2px]">
             {cells.map((i) => {
               const sel = i >= from && i <= to;
@@ -325,7 +403,22 @@ function BinPlanStrip({ pool, data, from, to, estimate }: { pool: Pool; data: Bi
               );
             })}
           </div>
-          <div className="mt-1 flex gap-[2px] text-[10px] text-faint">
+          {/* Bin indices under the selected squares and the active bin, thinned to a nice step when space is tight. */}
+          <div className="num mt-1 flex h-3.5 gap-[2px] text-[9px] leading-none">
+            {cells.map((i) => {
+              const show = i === cur || ((i >= from && i <= to) && i % labelStep === 0 && Math.abs(i - cur) >= labelStep);
+              return (
+                <div key={i} className="relative min-w-[3px] flex-1">
+                  {show && (
+                    <span className={`absolute left-1/2 -translate-x-1/2 whitespace-nowrap ${i === cur ? "font-semibold text-text" : "text-muted"}`}>
+                      {i}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex gap-[2px] text-[10px] text-faint">
             {cells.map((i) => (
               <div key={i} className="relative min-w-[3px] flex-1">
                 {i === cur && <span className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-text">▲ active</span>}

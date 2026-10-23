@@ -8,6 +8,7 @@ import ConfigPanel from "./ConfigPanel";
 import Hero from "./Hero";
 import Histogram from "./Histogram";
 import { RiskDrawer } from "./Risk";
+import { HowItWorks, PoolStats } from "./SideCards";
 import { Card, Collapsible, Skeleton, TokenLogo } from "./ui";
 
 export default function Planner() {
@@ -22,10 +23,12 @@ export default function Planner() {
   return (
     <div className="grid gap-5 lg:grid-cols-[340px_minmax(0,1fr)] lg:items-start">
       {/* Desktop: sticky config column */}
-      <aside className="hidden lg:sticky lg:top-4 lg:block">
+      <aside className="hidden space-y-3 lg:sticky lg:top-4 lg:block">
         <Card className="p-5">
           <ConfigPanel m={m} />
         </Card>
+        {pool && <PoolStats pool={pool} />}
+        <HowItWorks pool={pool} />
       </aside>
 
       <section className="min-w-0 space-y-3">
@@ -70,6 +73,12 @@ export default function Planner() {
             </Collapsible>
           </Card>
         )}
+
+        {/* Mobile: side cards after the results */}
+        <div className="space-y-3 lg:hidden">
+          {pool && <PoolStats pool={pool} />}
+          <HowItWorks pool={pool} />
+        </div>
       </section>
 
       {pool && <RiskDrawer pool={pool} open={riskOpen} onClose={() => setRiskOpen(false)} />}
