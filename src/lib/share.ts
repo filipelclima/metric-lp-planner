@@ -248,3 +248,71 @@ export function portfolioShareText(s: PortfolioSnapshot): string {
 export function portfolioOgQuery(snap: PortfolioSnapshot | null): string {
   return snap ? `${portfolioSnapshotParams(snap)}&v=${OG_VERSION}` : `kind=portfolio&v=${OG_VERSION}`;
 }
+
+// ---------- top pools snapshots ----------
+
+/**
+ * Top-pools share snapshot (the /pools card): up to 5 rows, each pair + net APR % + fee APR %, plus date
+ * and an optional chain scope. Params: tp1..tp5 (pair), tn1..tn5 (net %), tf1..tf5 (fee %, optional),
+ * tch (chain id, optional), sd. Rows must be contiguous from 1; anything invalid voids the snapshot.
+ */
+export interface TopSnapshot {
+  rows: { pair: string; netApr: number; feeApr: number | null }[];
+  chainId: number | null;
+  date: string;
+}
+
+const TOP_CHAINS = [1, 56, 4663];
+
+export function parseTopSnapshot(q: Params, now = Date.now()): TopSnapshot | null {
+  const sd = q.get("sd");
+  const day = sd === null ? null : date(sd, now);
+  if (day === null || q.get("tp1") === null) return null;
+  const rows: TopSnapshot["rows"] = [];
+  for (let i = 1; i <= 5; i++) {
+    const pair = q.get(`tp${i}`);
+    const tn = q.get(`tn${i}`);
+    const tf = q.get(`tf${i}`);
+    if (pair === null) {
+      if (tn !== null || tf !== null) return null;
+      // rows must be contiguous: nothing may follow a gap
+      for (let j = i + 1; j <= 5; j++) if (q.get(`tp${j}`) !== null) return null;
+      break;
+    }
+    if (pair.length > 25 || !PAIR.test(pair) || tn === null) return null;
+    const netApr = num(tn, -1e6, 1e6);
+    const feeApr = tf === null ? null : num(tf, -1e6, 1e6);
+    if (netApr === null || (tf !== null && feeApr === null)) return null;
+    rows.push({ pair, netApr, feeApr });
+  }
+  const tch = q.get("tch");
+  const chainId = tch === null ? null : Number(tch);
+  if (tch !== null && (!/^\d+$/.test(tch) || !TOP_CHAINS.includes(chainId!))) return null;
+  return { rows, chainId, date: day };
+}
+
+export function topSnapshotParams(s: TopSnapshot): URLSearchParams {
+  const q = new URLSearchParams();
+  s.rows.slice(0, 5).forEach((r, i) => {
+    q.set(`tp${i + 1}`, r.pair);
+    q.set(`tn${i + 1}`, r2(r.netApr).toFixed(2));
+    if (r.feeApr !== null) q.set(`tf${i + 1}`, r2(r.feeApr).toFixed(2));
+  });
+  if (s.chainId !== null) q.set("tch", String(s.chainId));
+  q.set("sd", s.date);
+  return q;
+}
+
+/** Rounds and validates; drops rows whose pair doesn't validate (e.g. unusual symbols). */
+export function freezeTopSnapshot(raw: TopSnapshot, now = Date.now()): TopSnapshot | null {
+  const rows = raw.rows
+    .filter((r) => Number.isFinite(r.netApr) && (r.feeApr === null || Number.isFinite(r.feeApr)) && PAIR.test(r.pair) && r.pair.length <= 25)
+    .slice(0, 5);
+  if (rows.length === 0) return null;
+  return parseTopSnapshot(topSnapshotParams({ ...raw, rows }), now);
+}
+
+/** og:image query for /pools: the top-5 snapshot, else the generic card. */
+export function topOgQuery(snap: TopSnapshot | null): string {
+  return snap ? `${topSnapshotParams(snap)}&v=${OG_VERSION}` : `kind=pools&v=${OG_VERSION}`;
+}

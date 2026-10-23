@@ -44,6 +44,31 @@ Think *Poolfish (uniswap.fish) for Metric*.
 - Motion: count-up numbers, staggered hero entrance, growing bars and an animated range overlay (framer-motion). All of it is disabled under `prefers-reduced-motion`.
 - Shareable URL, e.g. `?chain=56&pool=0x..&amount=1000&days=30&from=-8&to=7&strategy=uniform&period=7d`. A `preset=80|90|95` parameter keeps an auto preset live.
 
+## Top pools (`/pools`)
+
+Every Metric pool ranked by **net APR (7d)**. `tradingPnlAprBps7d` is fees + price moves and already includes fees, so the two are never added.
+
+- **Data**: `/api/pools-ranking` pulls `/evm/metadata?include24h=true&minTvlFiat=0` per chain, all pages, and caches for 300s.
+- **Columns** (all sortable, default net APR descending):
+  - pair with a chain badge, tier, TVL, 24h volume;
+  - fee APR and net APR, each with a bar;
+  - **price drag** = fee APR − net APR (how much price moves ate);
+  - **vol / TVL** = 24h volume ÷ TVL.
+- **Filters** (kept in the URL):
+  - chain;
+  - tier: hide High Risk (default), Best Practices only, or all;
+  - min TVL, default $25k, so tiny pools with absurd APRs stay out;
+  - only verified curators;
+  - **Show all**: also paused pools, private (deposit-whitelisted) pools and pools whose price feed isn't healthy.
+- **Highlights**:
+  - best net APR;
+  - "highest fees but negative net" (the trap);
+  - most efficient (vol / TVL).
+- **Links**: every row and highlight has **Plan** (opens the planner with that pool) and **Open on Metric ↗**.
+- **Copy weekly top 5**: a ready-to-paste X post built from the current filters.
+- **Share result**: freezes the top 5 into the link (`tp1..5`, `tn1..5`, `tf1..5`, optional `tch`, `sd`). They're validated like the other snapshots in `src/lib/share.ts`, and `/api/og` renders them as a ranked card.
+- Ranking, filters, highlights and the post text are pure functions in `src/lib/ranking.ts`, tested in `tests/ranking.test.ts`.
+
 ## Portfolio (`/portfolio?wallet=0x…`)
 
 Paste any wallet to see its Metric LP positions. It's read-only: no wallet connection, no signatures, and only public onchain data plus Metric's public API.
@@ -150,6 +175,7 @@ src/lib/urlState.ts    shareable URL state
 src/lib/plan.ts        URL state + API data → range and estimate (shared by the page and /api/og)
 src/lib/usePlanner.ts  client hook: URL sync, data fetching, derived estimate
 src/app/api/**         proxy route handlers + /api/og share image
+src/lib/ranking.ts     top pools: rows, filters, sorting, highlights, weekly post (pure)
 src/lib/portfolio/     portfolio: ABIs, pure model (decoding, positions, value, HODL, status, insights), server loader
 src/components/**      UI (Planner, ConfigPanel, Hero, Histogram, BinDetails, Risk, ShareMenu, PoolPicker, portfolio/*)
 ```

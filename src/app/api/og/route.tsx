@@ -9,10 +9,12 @@ import {
   formatSnapshot,
   parsePortfolioSnapshot,
   parseSnapshot,
+  parseTopSnapshot,
   rawRange,
   snapshotRangeText,
   type PortfolioSnapshot,
   type Snapshot,
+  type TopSnapshot,
 } from "@/lib/share";
 import { readState, type PlannerState } from "@/lib/urlState";
 
@@ -39,6 +41,8 @@ interface CardView {
   kicker?: string;
   /** Call to action shown instead of stats. */
   cta?: string;
+  /** Ranked list (top pools card), shown instead of stats. */
+  list?: { rank: number; pair: string; net: string; netColor: string; fee: string }[];
 }
 
 const shortAddr = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -59,7 +63,12 @@ export async function GET(req: Request) {
     const s = readState(params);
     const snap = parseSnapshot(params);
     const pf = parsePortfolioSnapshot(params);
-    if (pf) {
+    const top = parseTopSnapshot(params);
+    if (top) {
+      view = topView(top);
+    } else if (params.get("kind") === "pools") {
+      view = { pair: "Top Metric pools", chain: null, plan: "Ranked by net APR (7d, fees + price moves)", stats: null, kicker: "Top pools · Metric", cta: "Open to see the live ranking" };
+    } else if (pf) {
       view = portfolioView(pf);
     } else if (params.get("kind") === "portfolio") {
       view = { pair: "Metric LP portfolio", chain: null, plan: "Value, fees and PnL of any wallet's Metric positions", stats: null, kicker: "LP portfolio · Metric", cta: "Open to see live positions" };
@@ -114,6 +123,26 @@ async function loadData(s: PlannerState): Promise<{ pool: Pool | null; binData: 
     binData = null;
   }
   return { pool, binData, binsFailed: !binData };
+}
+
+/** Top-5 card: rows rendered as a ranked list (all values passed parseTopSnapshot). */
+function topView(t: TopSnapshot): CardView {
+  const pct = (v: number) => `${Math.abs(v) >= 100 ? Math.round(v) : v.toFixed(1)}%`;
+  return {
+    pair: `Top ${t.rows.length} Metric pools`,
+    chain: t.chainId !== null ? (CHAINS[t.chainId]?.name ?? null) : null,
+    plan: "by net APR (7d, fees + price moves)",
+    stats: null,
+    list: t.rows.map((r, i) => ({
+      rank: i + 1,
+      pair: r.pair,
+      net: pct(r.netApr),
+      netColor: r.netApr < 0 ? COLORS.bad : COLORS.good,
+      fee: r.feeApr === null ? "fee n/a" : `fee ${pct(r.feeApr)}`,
+    })),
+    asOf: new Date(`${t.date}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }),
+    kicker: "Top pools · Metric",
+  };
 }
 
 /** Portfolio card: totals only — the wallet address is never part of the image. */
@@ -183,7 +212,9 @@ function buildView(s: PlannerState, pool: Pool | null, binData: BinData | null, 
 
 function Card({ view }: { view: CardView }) {
   return (
-    <div style={{ width: W, height: H, display: "flex", flexDirection: "column", background: COLORS.bg, color: COLORS.text, padding: 64, fontFamily: "sans-serif" }}>
+    <div
+      style={{ width: W, height: H, display: "flex", flexDirection: "column", background: COLORS.bg, color: COLORS.text, padding: view.list ? "44px 64px" : 64, fontFamily: "sans-serif" }}
+    >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <div style={{ display: "flex", alignItems: "flex-end", gap: 5, width: 52, height: 52, borderRadius: 14, background: "#171b22", padding: "0 9px 10px" }}>
@@ -196,15 +227,26 @@ function Card({ view }: { view: CardView }) {
         <div style={{ display: "flex", fontSize: 22, color: COLORS.faint }}>{view.kicker ?? "LP plan · Metric pools"}</div>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 20, marginTop: 56 }}>
-        <div style={{ display: "flex", fontSize: 64, fontWeight: 700, letterSpacing: -2 }}>{view.pair}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 20, marginTop: view.list ? 28 : 56 }}>
+        <div style={{ display: "flex", fontSize: view.list ? 48 : 64, fontWeight: 700, letterSpacing: -2 }}>{view.pair}</div>
         {view.chain && (
           <div style={{ display: "flex", fontSize: 24, color: COLORS.muted, background: "#1e232c", borderRadius: 10, padding: "6px 14px" }}>{view.chain}</div>
         )}
       </div>
-      <div style={{ display: "flex", fontSize: 28, color: COLORS.muted, marginTop: 12 }}>{view.plan}</div>
+      <div style={{ display: "flex", fontSize: view.list ? 24 : 28, color: COLORS.muted, marginTop: view.list ? 6 : 12 }}>{view.plan}</div>
 
-      {view.stats ? (
+      {view.list ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 18 }}>
+          {view.list.map((r) => (
+            <div key={r.rank} style={{ display: "flex", flexShrink: 0, alignItems: "center", background: COLORS.surface, borderRadius: 12, padding: "6px 24px", fontSize: 27 }}>
+              <div style={{ display: "flex", width: 48, color: COLORS.faint }}>{r.rank}</div>
+              <div style={{ display: "flex", flex: 1, fontWeight: 700 }}>{r.pair}</div>
+              <div style={{ display: "flex", width: 190, justifyContent: "flex-end", color: r.netColor, fontWeight: 700 }}>{r.net}</div>
+              <div style={{ display: "flex", width: 210, justifyContent: "flex-end", color: COLORS.muted, fontSize: 24 }}>{r.fee}</div>
+            </div>
+          ))}
+        </div>
+      ) : view.stats ? (
         <div style={{ display: "flex", gap: 24, marginTop: "auto" }}>
           {view.stats.map((st) => (
             <div key={st.label} style={{ display: "flex", flexDirection: "column", flex: 1, background: COLORS.surface, borderRadius: 20, padding: "24px 28px" }}>
