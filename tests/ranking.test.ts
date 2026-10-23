@@ -117,17 +117,38 @@ describe("sorting", () => {
 });
 
 describe("highlights", () => {
-  it("best net, the trap (highest fee APR with negative net) and most efficient", () => {
+  it("best net (fee-driven), the trap (highest fee APR with negative net) and most efficient", () => {
     const rows = [
-      pool(1, { net: 1200, fee: 1500, vol: 10_000 }),
+      pool(1, { net: 1200, fee: 1500, vol: 10_000 }), // most efficient among non-negative net
       pool(2, { net: -400, fee: 9000, vol: 20_000 }), // the trap
-      pool(3, { net: -50, fee: 3000, vol: 900_000 }), // negative net but lower fees; most efficient
-      pool(4, { net: 3000, fee: 3100, vol: 0 }), // best net; zero volume can't be "efficient"
+      pool(3, { net: -50, fee: 3000, vol: 900_000 }), // highest vol/TVL but negative net: excluded
+      pool(4, { net: 3000, fee: 3100, vol: 0 }), // best fee-driven net; zero volume can't be "efficient"
     ].map(toRow);
     const h = highlights(rows);
     expect(h.bestNet?.pair).toBe("T4/USDT");
     expect(h.trap?.pair).toBe("T2/USDT");
-    expect(h.mostEfficient?.pair).toBe("T3/USDT");
+    expect(h.mostEfficient?.pair).toBe("T1/USDT");
+  });
+
+  it("best net skips price-driven pools (QNT/USDC-like: net 372% on 37% fees)", () => {
+    const rows = [pool(1, { pair: "QNT/USDC", net: 37_200, fee: 3_700 }), pool(2, { pair: "NVDAB/USDT", net: 6_010, fee: 10_800 })].map(toRow);
+    expect(highlights(rows).bestNet?.pair).toBe("NVDAB/USDT");
+    // net between fee and 1.5× fee: not flagged, but not fee-driven either
+    expect(highlights([pool(3, { net: 1_200, fee: 1_000 })].map(toRow)).bestNet).toBeNull();
+    // net exactly equal to fee counts as fee-driven
+    expect(highlights([pool(4, { net: 1_000, fee: 1_000 })].map(toRow)).bestNet?.pair).toBe("T4/USDT");
+  });
+
+  it("most efficient never picks the trap (WETH/USDG-like: highest vol/TVL, net −306%)", () => {
+    const rows = [
+      pool(1, { pair: "WETH/USDG", net: -30_600, fee: 25_000, vol: 5_000_000, tvl: 100_000 }),
+      pool(2, { pair: "AAPLB/USDT", net: 1_500, fee: 1_800, vol: 300_000, tvl: 1_200_000 }),
+      pool(3, { pair: "NONET/USDT", net: null, fee: 900, vol: 200_000, tvl: 400_000 }),
+    ].map(toRow);
+    const h = highlights(rows);
+    expect(h.trap?.pair).toBe("WETH/USDG");
+    expect(h.mostEfficient?.pair).toBe("NONET/USDT"); // 0.5× beats 0.25×; unknown net isn't excluded
+    expect(h.mostEfficient?.pair).not.toBe(h.trap?.pair);
   });
 
   it("no trap when every net APR is positive", () => {
@@ -179,5 +200,21 @@ describe("links and URL state", () => {
       sort: { key: "efficiency", dir: "asc" },
     });
     expect(readRankingState(new URLSearchParams("chain=9&tier=x&minTvl=7&sort=zzz")).filters).toEqual(DEFAULT_FILTERS);
+  });
+});
+
+describe("price-driven chip", () => {
+  it("flags net APR above 1.5× fee APR", async () => {
+    const { isPriceDriven, isFeeDriven, PRICE_DRIVEN_RATIO } = await import("@/lib/ranking");
+    expect(PRICE_DRIVEN_RATIO).toBe(1.5);
+    expect(isPriceDriven({ feeApr: 0.37, netApr: 3.72 })).toBe(true); // QNT/USDC
+    expect(isPriceDriven({ feeApr: 1, netApr: 1.5 })).toBe(false); // boundary: not above
+    expect(isPriceDriven({ feeApr: 1, netApr: 1.5001 })).toBe(true);
+    expect(isPriceDriven({ feeApr: 1.08, netApr: 0.601 })).toBe(false);
+    expect(isPriceDriven({ feeApr: 0, netApr: 0.1 })).toBe(true); // no fees at all
+    expect(isPriceDriven({ feeApr: null, netApr: 2 })).toBe(false);
+    expect(isPriceDriven({ feeApr: 1, netApr: null })).toBe(false);
+    expect(isFeeDriven({ feeApr: 1.08, netApr: 0.601 })).toBe(true);
+    expect(isFeeDriven({ feeApr: 0.37, netApr: 3.72 })).toBe(false);
   });
 });

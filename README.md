@@ -48,7 +48,12 @@ Think *Poolfish (uniswap.fish) for Metric*.
 
 Every Metric pool ranked by **net APR (7d)**. `tradingPnlAprBps7d` is fees + price moves and already includes fees, so the two are never added.
 
-- **Data**: `/api/pools-ranking` pulls `/evm/metadata?include24h=true&minTvlFiat=0` per chain, all pages, and caches for 300s.
+- **Data**: `/api/pools-ranking` pulls `/evm/metadata?include24h=true&minTvlFiat=0` per chain, all chains in parallel.
+  - It fetches the first page, then the remaining pages in parallel from the reported `total`.
+  - Each request has a 20s timeout and is retried twice with backoff.
+  - A chain that still fails falls back to that server's last good rows (`staleChains`); only a chain with no fallback is reported in `failedChains`.
+  - Complete results are cached `s-maxage=300, stale-while-revalidate=86400`. Incomplete ones are `no-store`, so a cold-start failure is never cached at the edge.
+  - The page retries once silently before showing an error banner.
 - **Columns** (all sortable, default net APR descending):
   - pair with a chain badge, tier, TVL, 24h volume;
   - fee APR and net APR, each with a bar;
@@ -60,10 +65,11 @@ Every Metric pool ranked by **net APR (7d)**. `tradingPnlAprBps7d` is fees + pri
   - min TVL, default $25k, so tiny pools with absurd APRs stay out;
   - only verified curators;
   - **Show all**: also paused pools, private (deposit-whitelisted) pools and pools whose price feed isn't healthy.
+- **Price-driven chip**: on rows where net APR > 1.5 × fee APR. Most of the 7d return came from price moves, not fees, and may not repeat.
 - **Highlights**:
-  - best net APR;
+  - best net APR (fee-driven): only pools with net APR ≤ fee APR;
   - "highest fees but negative net" (the trap);
-  - most efficient (vol / TVL).
+  - most efficient (vol / TVL), excluding pools with negative net APR.
 - **Links**: every row and highlight has **Plan** (opens the planner with that pool) and **Open on Metric ↗**.
 - **Copy weekly top 5**: a ready-to-paste X post built from the current filters.
 - **Share result**: freezes the top 5 into the link (`tp1..5`, `tn1..5`, `tf1..5`, optional `tch`, `sd`). They're validated like the other snapshots in `src/lib/share.ts`, and `/api/og` renders them as a ranked card.

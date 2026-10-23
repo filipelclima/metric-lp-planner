@@ -10,6 +10,7 @@ import {
   filterRows,
   highlights,
   isActive,
+  isPriceDriven,
   metricPoolUrl,
   planUrl,
   readRankingState,
@@ -32,8 +33,12 @@ import { Card, ChainBadge, ErrorNote, InfoTip, Segmented, Skeleton, TierBadge, T
 interface RankingResponse {
   rows: RankRow[];
   failedChains: number[];
+  /** Chains served from the last good result because a fresh fetch failed. */
+  staleChains?: number[];
   generatedAt: number;
 }
+
+const PRICE_DRIVEN_TIP = "Most of this return came from price moves in the last 7 days, not fees, and may not repeat.";
 
 const PAGE = 100;
 const NET_TIP = "Net APR = what LPs made over the last 7 days after price moves. It already includes fees (fees + price moves). Historical, not a forecast.";
@@ -55,6 +60,20 @@ export default function TopPools() {
   const [limit, setLimit] = useState(PAGE);
   const res = useApi<RankingResponse>("/api/pools-ranking");
   const reduced = useReducedMotion();
+
+  // Cold starts can drop a big chain: retry once silently before showing any error banner.
+  const [silentRetry, setSilentRetry] = useState<"idle" | "done">("idle");
+  const incomplete = !!res.error || (res.data?.failedChains.length ?? 0) > 0;
+  const { retry } = res;
+  useEffect(() => {
+    if (silentRetry !== "idle" || !incomplete || res.loading) return;
+    const t = setTimeout(() => {
+      setSilentRetry("done");
+      retry();
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [incomplete, res.loading, silentRetry, retry]);
+  const showErrors = silentRetry === "done" && !res.loading;
 
   // URL keeps the filters/sort shareable; snapshot params from a shared link are dropped once open.
   const qs = writeRankingState(filters, sort);
@@ -90,17 +109,26 @@ export default function TopPools() {
 
       <FilterBar filters={filters} set={set} />
 
-      {res.error && !res.data && <ErrorNote message={res.error} retryAfter={res.retryAfter} onRetry={res.retry} />}
-      {res.data && res.data.failedChains.length > 0 && (
+      {showErrors && res.error && !res.data && <ErrorNote message={res.error} retryAfter={res.retryAfter} onRetry={res.retry} />}
+      {showErrors && res.data && res.data.failedChains.length > 0 && (
         <ErrorNote message={`Couldn't load ${res.data.failedChains.map(chainName).join(", ")} — the ranking may be incomplete.`} onRetry={res.retry} />
       )}
-      {res.loading && !res.data && <RankingSkeleton />}
+      {res.data && (res.data.staleChains?.length ?? 0) > 0 && (
+        <p className="text-xs text-faint">Showing the last cached data for {res.data.staleChains!.map(chainName).join(", ")} (a fresh fetch failed).</p>
+      )}
+      {((res.loading && !res.data) || (!res.data && res.error && !showErrors)) && <RankingSkeleton />}
 
       {res.data && (
         <motion.div className="space-y-5" variants={stagger} initial={reduced ? false : "hidden"} animate="show">
           <div className="grid gap-3 md:grid-cols-3">
             <motion.div variants={rise}>
-              <HighlightCard title="Best net APR" row={hl.bestNet} primary="net" tone="good" />
+              <HighlightCard
+                title="Best net APR (fee-driven)"
+                row={hl.bestNet}
+                primary="net"
+                tone="good"
+                tip="Highest net APR among pools whose net APR is at most their fee APR, so the return came from fees rather than price luck."
+              />
             </motion.div>
             <motion.div variants={rise}>
               <HighlightCard
@@ -326,6 +354,15 @@ function HighlightCard({
   );
 }
 
+function PriceDrivenChip() {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-warn/10 px-1.5 py-0.5 text-[10px] font-medium text-warn">
+      price-driven
+      <InfoTip>{PRICE_DRIVEN_TIP}</InfoTip>
+    </span>
+  );
+}
+
 function PairCell({ r, className = "" }: { r: RankRow; className?: string }) {
   return (
     <span className={`flex min-w-0 items-center gap-2 ${className}`}>
@@ -427,6 +464,11 @@ function RankTable({ rows, sort, onSort }: { rows: RankRow[]; sort: { key: SortK
               </td>
               <td className="px-3 py-2.5">
                 <AprBar value={r.netApr} scale={scale} kind="net" />
+                {isPriceDriven(r) && (
+                  <div className="mt-1 text-right">
+                    <PriceDrivenChip />
+                  </div>
+                )}
               </td>
               <td className={`num px-3 py-2.5 text-right text-[13px] ${r.priceDrag !== null && r.priceDrag > 0 ? "text-warn" : "text-muted"}`}>{pct(r.priceDrag)}</td>
               <td className="num px-3 py-2.5 text-right text-[13px] text-muted">{ratio(r.efficiency)}</td>
@@ -464,6 +506,11 @@ function RankCards({ rows }: { rows: RankRow[] }) {
                 Net APR <InfoTip>{NET_TIP}</InfoTip>
               </div>
               <AprBar value={r.netApr} scale={scale} kind="net" />
+              {isPriceDriven(r) && (
+                <div className="mt-1 text-right">
+                  <PriceDrivenChip />
+                </div>
+              )}
             </div>
           </div>
           <div className="num mt-3 grid grid-cols-3 gap-2 text-[11px] text-muted">

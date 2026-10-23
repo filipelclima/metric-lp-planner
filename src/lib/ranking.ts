@@ -116,12 +116,29 @@ export function sortRows(rows: RankRow[], key: SortKey, dir: SortDir): RankRow[]
     .map((x) => x.r);
 }
 
+// ---------- price-driven vs fee-driven ----------
+
+/** Net above 1.5× fee APR means most of the return came from price moves, not fees. */
+export const PRICE_DRIVEN_RATIO = 1.5;
+
+/** Net APR > fee APR × 1.5: the 7d return was mostly price luck and may not repeat. */
+export function isPriceDriven(r: Pick<RankRow, "feeApr" | "netApr">): boolean {
+  return r.netApr !== null && r.feeApr !== null && r.netApr > r.feeApr * PRICE_DRIVEN_RATIO;
+}
+
+/** Net APR ≤ fee APR: price moves didn't add to the return, so it's earned from fees. */
+export function isFeeDriven(r: Pick<RankRow, "feeApr" | "netApr">): boolean {
+  return r.netApr !== null && r.feeApr !== null && r.netApr <= r.feeApr;
+}
+
 // ---------- highlights ----------
 
 export interface Highlights {
+  /** Best net APR among fee-driven pools only (net ≤ fee), so price luck doesn't win. */
   bestNet: RankRow | null;
   /** Highest fee APR among pools whose net APR is negative: fees look great, price moves ate more. */
   trap: RankRow | null;
+  /** Highest 24h volume / TVL among pools with traded volume and a non-negative net APR. */
   mostEfficient: RankRow | null;
 }
 
@@ -137,12 +154,15 @@ function maxBy(rows: RankRow[], f: (r: RankRow) => number | null): RankRow | nul
 
 export function highlights(rows: RankRow[]): Highlights {
   return {
-    bestNet: maxBy(rows, (r) => r.netApr),
+    bestNet: maxBy(rows.filter(isFeeDriven), (r) => r.netApr),
     trap: maxBy(
       rows.filter((r) => r.netApr !== null && r.netApr < 0),
       (r) => r.feeApr,
     ),
-    mostEfficient: maxBy(rows, (r) => (r.vol24h && r.vol24h > 0 ? r.efficiency : null)),
+    mostEfficient: maxBy(
+      rows.filter((r) => !(r.netApr !== null && r.netApr < 0)),
+      (r) => (r.vol24h && r.vol24h > 0 ? r.efficiency : null),
+    ),
   };
 }
 
