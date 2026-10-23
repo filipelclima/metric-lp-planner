@@ -30,6 +30,9 @@ Think *Poolfish (uniswap.fish) for Metric*.
   - A prominent warning for red-tier pools.
 - Results-first layout: a sticky config column (with distribution and data period under "Advanced"), a result hero (headline fees, fee vs net APR, projection chart, visual bin ruler with a copyable plan, tokens needed), the liquidity histogram, and a collapsible bin details table. Hovering a bar highlights its table row and vice versa. Risk details open in a side drawer from the status pills.
 - **Share card**: `/api/og` renders a 1200×630 PNG of the plan from the same URL params (Next.js `ImageResponse`). It's used as the page's OG/Twitter image, so shared links preview the result, and the Share menu offers Copy link, Download image and Post on X.
+  - Built for crawlers: the route runs on the edge, and the Metric lookups share a 2s deadline. If Metric is slow or down, it still returns a 200 PNG with the plan and "Open to see live estimates".
+  - Live cards are cached with `public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800`. Plan-only fallbacks are cached for 60s, so live numbers replace them quickly.
+  - `htmlLimitedBots: /.*/` keeps og/twitter tags in `<head>` for every user agent. Bump `OG_VERSION` in `src/app/page.tsx` to make X refetch cached images.
 - Motion: count-up numbers, staggered hero entrance, growing bars and an animated range overlay (framer-motion). All of it is disabled under `prefers-reduced-motion`.
 - Shareable URL, e.g. `?chain=56&pool=0x..&amount=1000&days=30&from=-8&to=7&strategy=uniform&period=7d`. A `preset=80|90|95` parameter keeps an auto preset live.
 
