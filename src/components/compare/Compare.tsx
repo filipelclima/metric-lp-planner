@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { fmtAmount, fmtApr, fmtUsd, fmtWidth, parseBins, type BinData } from "@/lib/calc";
+import { fmtApr, fmtUsd, fmtWidth, parseBins, type BinData } from "@/lib/calc";
 import {
   MAX_SCENARIOS,
   SCENARIO_LABELS,
@@ -24,9 +24,11 @@ import {
 } from "@/lib/compare";
 import type { Period, Pool, RawBinsResponse, Strategy } from "@/lib/types";
 import { compareOgQuery, compareSnapshotParams, freezeCompareSnapshot, makeShareId, today } from "@/lib/share";
+import { activePreset, tokenNeeds, widerRange } from "@/lib/rangeInputs";
 import { useApi } from "@/lib/useApi";
 import { useApis } from "@/lib/useApis";
 import PoolPicker from "../PoolPicker";
+import { BinField, PresetPicker, flashCls, useFlash } from "../RangeControls";
 import { ShareMenu, type ShareLinks } from "../ShareMenu";
 import { Card, ChainBadge, ErrorNote, Field, InfoTip, Segmented, Skeleton, inputCls } from "../ui";
 import { AprBars, OverlayHistogram, SCENARIO_COLORS } from "./CompareCharts";
@@ -278,7 +280,7 @@ function ScenarioEditor({
             <span className="flex h-6 w-6 items-center justify-center rounded-md text-xs font-bold text-bg" style={{ background: r.color }}>
               {r.label}
             </span>
-            <span className="text-sm font-medium">{scenarioTitle(sc, r.range)}</span>
+            <span className="text-sm font-medium">{rowTitle(r)}</span>
             {r.metrics && (
               <span className="num text-xs text-muted">
                 #{r.metrics.from} → #{r.metrics.to}
@@ -293,25 +295,36 @@ function ScenarioEditor({
           )}
         </div>
         <div className="mt-3 space-y-2.5">
-          <Segmented<PresetShare | "manual">
-            full
+          <PresetPicker
             size="sm"
-            value={sc.range.kind === "preset" ? sc.range.share : "manual"}
-            onChange={(v) =>
+            data={r.data}
+            value={activePreset(sc.range, r.data)}
+            onPick={(v) =>
               onChange({
-                range: v === "manual" ? { kind: "manual", from: r.metrics?.from ?? -5, to: r.metrics?.to ?? 5 } : { kind: "preset", share: v },
+                range:
+                  v === "manual"
+                    ? { kind: "manual", from: r.metrics?.from ?? -5, to: r.metrics?.to ?? 5 }
+                    : v === "wider"
+                      ? { kind: "manual", ...(r.data ? widerRange(r.data) : { from: -7, to: 7 }) }
+                      : { kind: "preset", share: v },
               })
             }
-            options={[
-              { value: 80, label: "80%" },
-              { value: 90, label: "90%" },
-              { value: 95, label: "95%" },
-              { value: "manual", label: "Manual" },
-            ]}
           />
           <div className="grid grid-cols-2 gap-2">
-            <BinInput label="Start bin" value={r.metrics?.from ?? null} onCommit={(v) => onChange({ range: { kind: "manual", from: Math.min(v, r.metrics?.to ?? v), to: Math.max(v, r.metrics?.to ?? v) } })} />
-            <BinInput label="End bin" value={r.metrics?.to ?? null} onCommit={(v) => onChange({ range: { kind: "manual", from: Math.min(v, r.metrics?.from ?? v), to: Math.max(v, r.metrics?.from ?? v) } })} />
+            <BinField
+              label="Start bin"
+              side="start"
+              data={r.data}
+              value={r.metrics?.from ?? null}
+              onCommit={(v) => onChange({ range: { kind: "manual", from: Math.min(v, r.metrics?.to ?? v), to: Math.max(v, r.metrics?.to ?? v) } })}
+            />
+            <BinField
+              label="End bin"
+              side="end"
+              data={r.data}
+              value={r.metrics?.to ?? null}
+              onCommit={(v) => onChange({ range: { kind: "manual", from: Math.min(v, r.metrics?.from ?? v), to: Math.max(v, r.metrics?.from ?? v) } })}
+            />
           </div>
           <Segmented<Strategy>
             full
@@ -411,12 +424,7 @@ function rows(days: number): Row[] {
     {
       key: "tokens",
       label: "Tokens needed",
-      render: (m, r) => {
-        const parts: string[] = [];
-        if (m.token1Usd > 0) parts.push(r.pool?.token1.fiatPrice ? `${fmtAmount(m.token1Amount, r.pool.token1.fiatPrice)} ${r.pool.token1.symbol}` : `${fmtUsd(m.token1Usd)} of ${r.pool?.token1.symbol ?? "token1"}`);
-        if (m.token0Usd > 0) parts.push(r.pool?.token0.fiatPrice ? `${fmtAmount(m.token0Amount, r.pool.token0.fiatPrice)} ${r.pool.token0.symbol}` : `${fmtUsd(m.token0Usd)} of ${r.pool?.token0.symbol ?? "token0"}`);
-        return <span className="text-[12px]">{parts.join(" + ") || "—"}</span>;
-      },
+      render: (m, r) => <span className="text-[12px]">{r.pool ? tokenNeeds(m, r.pool.token0, r.pool.token1).text : "—"}</span>,
     },
     {
       key: "idle",
@@ -455,8 +463,9 @@ function CompareTable({
   hovered: number | null;
   onHover: (i: number | null) => void;
 }) {
+  const flash = useFlash(resultsKey(resolved));
   return (
-    <Card className="hidden overflow-x-auto md:block">
+    <Card className={`hidden overflow-x-auto md:block ${flashCls(flash)}`}>
       <table className="w-full min-w-[720px] table-fixed text-sm">
         <thead>
           <tr className="border-b border-line/60">
@@ -473,7 +482,7 @@ function CompareTable({
                   <span className="flex h-5 w-5 items-center justify-center rounded text-[11px] font-bold text-bg" style={{ background: r.color }}>
                     {r.label}
                   </span>
-                  <span className="font-medium">{scenarioTitle(r.scenario, r.range)}</span>
+                  <span className="font-medium">{rowTitle(r)}</span>
                   {r.scenario.pool && r.pool && (
                     <span className="flex items-center gap-1 text-xs text-muted">
                       · {r.pool.pair} <ChainBadge chainId={r.pool.chainId} />
@@ -546,6 +555,7 @@ function MobileTabs({
   setTab: (i: number) => void;
 }) {
   const r = resolved[tab];
+  const flash = useFlash(resultsKey(resolved));
   return (
     <div className="md:hidden">
       <div className="mb-2 flex gap-1 rounded-xl bg-surface p-1">
@@ -556,7 +566,7 @@ function MobileTabs({
             className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-sm transition ${i === tab ? "bg-surface-3 text-text" : "text-muted"}`}
           >
             <span className="h-2 w-2 rounded-full" style={{ background: x.color }} />
-            {x.label} · {scenarioName(x.scenario)}
+            {x.label} · {activePreset(x.scenario.range, x.data) === "wider" ? "Wider" : scenarioName(x.scenario)}
           </button>
         ))}
       </div>
@@ -575,10 +585,10 @@ function MobileTabs({
             if (info.offset.x > 60 && tab > 0) setTab(tab - 1);
           }}
         >
-          <Card className="p-4">
+          <Card className={`p-4 ${flashCls(flash)}`}>
             <div className="h-1 rounded-full" style={{ background: r.color }} />
             <div className="mt-3 flex flex-wrap items-center gap-2 text-sm font-medium">
-              {scenarioTitle(r.scenario, r.range)}
+              {rowTitle(r)}
               <RangeNote range={r.range} />
             </div>
             <dl className="mt-3 space-y-2.5">
@@ -662,20 +672,11 @@ function DurationInput({ value, onChange }: { value: number; onChange: (v: numbe
   );
 }
 
-function BinInput({ label, value, onCommit }: { label: string; value: number | null; onCommit: (v: number) => void }) {
-  const [text, setText] = useState(value === null ? "" : String(value));
-  useEffect(() => setText(value === null ? "" : String(value)), [value]);
-  const commit = () => {
-    if (/^-?\d+$/.test(text.trim())) onCommit(Number(text));
-    else setText(value === null ? "" : String(value));
-  };
-  return (
-    <label className="block">
-      <span className="mb-1 block text-[11px] text-faint">{label}</span>
-      <input value={text} inputMode="numeric" onChange={(e) => setText(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === "Enter" && commit()} className={inputCls} placeholder="#" />
-    </label>
-  );
-}
+/** Column title; a manual range equal to the pool's "Wider" preset reads as "Wider". */
+const rowTitle = (r: Resolved) => (activePreset(r.scenario.range, r.data) === "wider" ? "Wider" : scenarioTitle(r.scenario, r.range));
+
+/** Changes whenever a scenario's results change, to flash the table. */
+const resultsKey = (list: Resolved[]) => list.map((r) => (r.metrics ? `${r.metrics.from}:${r.metrics.to}:${r.scenario.strategy}:${r.metrics.feeApr}` : "-")).join("|");
 
 /** Small note on a column: a manual duplicate ("Same range as B") or why a preset was widened. */
 function RangeNote({ range }: { range: ResolvedRange | null }) {

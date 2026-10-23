@@ -12,6 +12,9 @@ Think *Poolfish (uniswap.fish) for Metric*.
 - Deposit (USD), duration (30/60/90 days or custom) and data period (24h / **7d** / 30d).
 - Ranges:
   - **Auto presets**: the smallest contiguous bin range around the current bin that covers 80/90/95% of the period's volume.
+    Each button shows the range it gives and the volume it really covers (e.g. "#-2…#0 / 96%"); when a concentrated pool makes several presets match, a note says so. **Wider** = the 95% range + 2 bins each side (within the pool's bins); it's stored as a manual range.
+  - **Bin inputs** accept `+1`, `1`, `-2` and `−2`, reject other characters with an inline hint (keeping the last valid value), clamp to the pool's bins with a visible note, and have −/+ steppers and the bin's % edge underneath.
+  - **You'll need** shows each token's USD value and the total ("price n/a" when Metric has no price).
   - **Manual**: drag on the histogram, or type start and end bins.
 - Distributions:
   - **Uniform**: equal USD per bin.
@@ -195,6 +198,7 @@ src/lib/urlState.ts    shareable URL state
 src/lib/plan.ts        URL state + API data → range and estimate (shared by the page and /api/og)
 src/lib/usePlanner.ts  client hook: URL sync, data fetching, derived estimate
 src/app/api/**         proxy route handlers + /api/og share image
+src/lib/rangeInputs.ts bin input parsing/clamping, preset summaries, Wider, tokens needed (pure)
 src/lib/compare.ts     compare ranges: metrics, best per row, verdicts, cmp URL encoding (pure)
 src/lib/ranking.ts     top pools: rows, filters, sorting, highlights, weekly post (pure)
 src/lib/portfolio/     portfolio: ABIs, pure model (decoding, positions, value, HODL, status, insights), server loader

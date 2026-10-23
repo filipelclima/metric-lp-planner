@@ -5,7 +5,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CartesianGrid, Customized, Line, LineChart, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   bpsToFraction,
-  fmtAmount,
   fmtApr,
   fmtPlanPct,
   fmtUsd,
@@ -19,8 +18,10 @@ import {
   type Estimate,
 } from "@/lib/calc";
 import { NET_NOTE } from "@/lib/plan";
-import type { Period, Pool, PoolToken } from "@/lib/types";
+import { tokenNeeds } from "@/lib/rangeInputs";
+import type { Period, Pool } from "@/lib/types";
 import type { PlannerModel } from "@/lib/usePlanner";
+import { flashCls, useFlash } from "./RangeControls";
 import { RiskAlert, RiskPills } from "./Risk";
 import ShareMenu from "./ShareMenu";
 import { Card, CountUp, ErrorNote, InfoTip, Popover, SectionLabel, Skeleton, TokenLogo } from "./ui";
@@ -37,6 +38,7 @@ const rise: Variants = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0
 export default function Hero({ m, onOpenRisk }: { m: PlannerModel; onOpenRisk: () => void }) {
   const { pool, estimate, binData, range, s, bins, meta } = m;
   const reduced = useReducedMotion();
+  const flash = useFlash(`${range?.from}:${range?.to}:${s.strategy}:${s.amount}:${s.days}:${s.period}`);
 
   if (!pool) {
     if (s.pool && (meta.loading || !meta.error)) return <HeroSkeleton />;
@@ -86,7 +88,7 @@ export default function Hero({ m, onOpenRisk }: { m: PlannerModel; onOpenRisk: (
         </motion.div>
       )}
 
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
+      <div className={`grid gap-3 rounded-2xl xl:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)] ${flashCls(flash)}`}>
         <motion.div variants={rise}>
           <Card glow={glow} className="h-full p-5">
             <div className="flex items-start justify-between gap-3">
@@ -379,11 +381,11 @@ function BinPlanStrip({ pool, data, from, to, estimate }: { pool: Pool; data: Bi
 
   const summary = planText(data, from, to).split("\n")[2].replace(/ · active bin #-?\d+$/, "");
   const line = `#${from} (${fmtPlanPct(getBin(data, from).midPct)}) → #${to} (${fmtPlanPct(getBin(data, to).midPct)}) · ${summary}`;
-  const tokens = tokenParts(pool, estimate);
+  const { tokens, needs } = tokenParts(pool, estimate);
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(`${pool.pair} (${pool.poolAddress})\n${planText(data, from, to)}\n${tokens.map((t) => t.text).join(" + ")}`);
+      await navigator.clipboard.writeText(`${pool.pair} (${pool.poolAddress})\n${planText(data, from, to)}\n${needs.text}`);
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
     } catch {
@@ -462,25 +464,31 @@ function BinPlanStrip({ pool, data, from, to, estimate }: { pool: Pool; data: Bi
             <span key={t.token.symbol} className="flex items-center gap-2">
               {i > 0 && <span className="text-faint">+</span>}
               <TokenLogo src={t.token.logoUrl} symbol={t.token.symbol} size={22} />
-              <span className="num">{t.amount}</span>
-              <span className="text-sm text-muted">{t.token.symbol}</span>
+              {t.need.amount !== null ? (
+                <>
+                  <span className="num">{t.need.amount}</span>
+                  <span className="text-sm text-muted">{t.token.symbol}</span>
+                  <span className="num text-sm text-faint">≈ {t.need.usd}</span>
+                </>
+              ) : (
+                <>
+                  <span className="num">{t.need.usd}</span>
+                  <span className="text-sm text-muted">of {t.token.symbol}</span>
+                  <span className="text-xs text-warn">price n/a</span>
+                </>
+              )}
             </span>
           ))}
         </div>
+        {tokens.length > 0 && <div className="num mt-1 text-xs text-muted lg:text-right">total {needs.total}</div>}
       </div>
     </div>
   );
 }
 
-function tokenParts(pool: Pool, e: Estimate): { token: PoolToken; amount: string; text: string }[] {
-  const part = (usd: number, amt: number, t: PoolToken) => {
-    const amount = t.fiatPrice ? fmtAmount(amt, t.fiatPrice) : `${fmtUsd(usd)} (no price)`;
-    return { token: t, amount, text: `${amount} ${t.symbol}` };
-  };
-  const out = [];
-  if (e.token1Usd > 0) out.push(part(e.token1Usd, e.token1Amount, pool.token1));
-  if (e.token0Usd > 0) out.push(part(e.token0Usd, e.token0Amount, pool.token0));
-  return out;
+function tokenParts(pool: Pool, e: Estimate) {
+  const needs = tokenNeeds(e, pool.token0, pool.token1);
+  return { needs, tokens: needs.parts.map((need) => ({ token: need.side === 0 ? pool.token0 : pool.token1, need })) };
 }
 
 function Breakdown({ estimate, days, pool, binData, period }: { estimate: Estimate; days: number; pool: Pool; binData: BinData | null; period: Period }) {

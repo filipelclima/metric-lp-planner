@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import type { PlannerModel } from "@/lib/usePlanner";
 import type { Period, Strategy } from "@/lib/types";
 import PoolPicker from "./PoolPicker";
+import { activePreset, widerRange } from "@/lib/rangeInputs";
+import { BinField, PresetPicker } from "./RangeControls";
 import { Collapsible, ErrorNote, Field, InfoTip, Segmented, inputCls } from "./ui";
 
 const PRESET_DAYS = [30, 60, 90];
@@ -30,39 +32,38 @@ export default function ConfigPanel({ m }: { m: PlannerModel }) {
         label="Range"
         hint={
           <span className="flex items-center gap-1.5">
-            {s.range.kind === "preset" ? `${s.range.share}% of volume` : "Manual"}
+            {s.range.kind === "preset" ? `${s.range.share}% of volume` : activePreset(s.range, binData) === "wider" ? "95% + 2 bins each side" : "Manual"}
             <InfoTip side="bottom">
-              Presets pick the smallest contiguous bin range around the active bin that covered that share of the data period&apos;s volume. Drag on
-              the chart or type bins for a manual range.
+              Presets pick the smallest contiguous bin range around the active bin that covered that share of the data period&apos;s volume; the number under each is the range it gives and the volume it really covered. Wider adds 2 bins on each side of the 95% range. Drag on the chart or type bins for a manual range.
             </InfoTip>
           </span>
         }
       >
-        <Segmented
-          full
-          value={s.range.kind === "preset" ? s.range.share : "manual"}
-          onChange={(v) =>
+        <PresetPicker
+          data={binData}
+          value={activePreset(s.range, binData)}
+          onPick={(v) =>
             v === "manual"
               ? set({ range: { kind: "manual", from: range?.from ?? curBinIdx - 5, to: range?.to ?? curBinIdx + 5 } })
-              : set({ range: { kind: "preset", share: v } })
+              : v === "wider"
+                ? binData && set({ range: { kind: "manual", ...widerRange(binData) } })
+                : set({ range: { kind: "preset", share: v } })
           }
-          options={[
-            { value: 80 as const, label: "80%" },
-            { value: 90 as const, label: "90%" },
-            { value: 95 as const, label: "95%" },
-            { value: "manual" as const, label: "Manual" },
-          ]}
         />
         <div className="grid grid-cols-2 gap-2 pt-1">
-          <BinInput
+          <BinField
             label="Start bin"
+            side="start"
             value={range?.from ?? null}
-            onChange={(from) => set({ range: { kind: "manual", from: Math.min(from, range?.to ?? from), to: Math.max(from, range?.to ?? from) } })}
+            data={binData}
+            onCommit={(from) => set({ range: { kind: "manual", from: Math.min(from, range?.to ?? from), to: Math.max(from, range?.to ?? from) } })}
           />
-          <BinInput
+          <BinField
             label="End bin"
+            side="end"
             value={range?.to ?? null}
-            onChange={(to) => set({ range: { kind: "manual", from: Math.min(to, range?.from ?? to), to: Math.max(to, range?.from ?? to) } })}
+            data={binData}
+            onCommit={(to) => set({ range: { kind: "manual", from: Math.min(to, range?.from ?? to), to: Math.max(to, range?.from ?? to) } })}
           />
         </div>
       </Field>
@@ -81,15 +82,7 @@ export default function ConfigPanel({ m }: { m: PlannerModel }) {
           }
         >
           <div className="space-y-4">
-            <Field
-              label="Distribution"
-              hint={
-                <InfoTip side="bottom">
-                  Uniform: equal USD per bin. Curve: weighted toward the active bin. Fee-weighted: proportional to each bin&apos;s daily fees ÷
-                  liquidity.
-                </InfoTip>
-              }
-            >
+            <Field label="Distribution">
               <Segmented<Strategy>
                 full
                 value={s.strategy}
@@ -100,6 +93,10 @@ export default function ConfigPanel({ m }: { m: PlannerModel }) {
                   { value: "fee", label: "Fee-weighted" },
                 ]}
               />
+              <p className="mt-1.5 text-[11px] leading-snug text-faint">
+                How your deposit is split across the selected bins. Uniform = equal per bin · Curve = more near the current price · Fee-weighted = more
+                where fees were highest.
+              </p>
             </Field>
             <Field label="Data period" hint={binData && <WindowHint days={binData.windowDays} period={s.period} />}>
               <Segmented<Period>
@@ -112,6 +109,10 @@ export default function ConfigPanel({ m }: { m: PlannerModel }) {
                   { value: "30d", label: "30d" },
                 ]}
               />
+              <p className="mt-1.5 text-[11px] leading-snug text-faint">
+                Which past data the estimate uses. 24h = most recent but noisy · 7d = balanced (default) · 30d = steadier. &lsquo;window&rsquo; = days of
+                data this pool actually has.
+              </p>
             </Field>
           </div>
         </Collapsible>
@@ -195,28 +196,5 @@ function DurationInput({ value, onChange }: { value: number; onChange: (v: numbe
         )}
       </div>
     </Field>
-  );
-}
-
-function BinInput({ label, value, onChange }: { label: string; value: number | null; onChange: (v: number) => void }) {
-  const [text, setText] = useState(value === null ? "" : String(value));
-  useEffect(() => setText(value === null ? "" : String(value)), [value]);
-  const commit = () => {
-    if (/^-?\d+$/.test(text.trim())) onChange(Number(text));
-    else setText(value === null ? "" : String(value));
-  };
-  return (
-    <label className="block">
-      <span className="mb-1 block text-[11px] text-faint">{label}</span>
-      <input
-        value={text}
-        inputMode="numeric"
-        onChange={(e) => setText(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => e.key === "Enter" && commit()}
-        className={inputCls}
-        placeholder="#"
-      />
-    </label>
   );
 }
