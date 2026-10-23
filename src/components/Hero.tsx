@@ -1,5 +1,6 @@
 "use client";
 import { AnimatePresence, motion, useReducedMotion, type Variants } from "framer-motion";
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CartesianGrid, Customized, Line, LineChart, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
@@ -64,6 +65,12 @@ export default function Hero({ m, onOpenRisk }: { m: PlannerModel; onOpenRisk: (
       <motion.div variants={rise} className="flex flex-wrap items-center justify-between gap-2">
         <RiskPills pool={pool} onOpen={onOpenRisk} />
         <div className="flex items-center gap-2">
+          <Link
+            href={`/compare?${new URLSearchParams({ ...(s.chain !== null ? { chain: String(s.chain) } : {}), ...(s.pool ? { pool: s.pool } : {}), amount: String(s.amount), days: String(s.days), period: s.period })}`}
+            className="rounded-lg bg-surface-2 px-2.5 py-1.5 text-xs text-muted transition hover:bg-surface-3 hover:text-text"
+          >
+            Compare ranges
+          </Link>
           <Popover label="Fee breakdown" trigger="Breakdown">
             <Breakdown estimate={estimate} days={days} pool={pool} binData={binData} period={s.period} />
           </Popover>

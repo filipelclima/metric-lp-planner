@@ -10,11 +10,13 @@ import {
   parsePortfolioSnapshot,
   parseSnapshot,
   parseTopSnapshot,
+  parseCompareSnapshot,
   rawRange,
   snapshotRangeText,
   type PortfolioSnapshot,
   type Snapshot,
   type TopSnapshot,
+  type CompareSnapshot,
 } from "@/lib/share";
 import { readState, type PlannerState } from "@/lib/urlState";
 
@@ -43,6 +45,8 @@ interface CardView {
   cta?: string;
   /** Ranked list (top pools card), shown instead of stats. */
   list?: { rank: number; pair: string; net: string; netColor: string; fee: string }[];
+  /** Scenario columns (compare card), shown instead of stats. */
+  columns?: { label: string; color: string; title: string; range: string; fee: string; net: string; netColor: string; fees: string }[];
 }
 
 const shortAddr = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -64,7 +68,12 @@ export async function GET(req: Request) {
     const snap = parseSnapshot(params);
     const pf = parsePortfolioSnapshot(params);
     const top = parseTopSnapshot(params);
-    if (top) {
+    const cmp = parseCompareSnapshot(params);
+    if (cmp) {
+      view = compareView(cmp);
+    } else if (params.get("kind") === "compare") {
+      view = { pair: "Compare LP ranges", chain: null, plan: "Up to three ranges side by side: fees, net APR, volume covered", stats: null, kicker: "Compare · Metric", cta: "Open to compare ranges" };
+    } else if (top) {
       view = topView(top);
     } else if (params.get("kind") === "pools") {
       view = { pair: "Top Metric pools", chain: null, plan: "Ranked by net APR (7d, fees + price moves)", stats: null, kicker: "Top pools · Metric", cta: "Open to see the live ranking" };
@@ -123,6 +132,30 @@ async function loadData(s: PlannerState): Promise<{ pool: Pool | null; binData: 
     binData = null;
   }
   return { pool, binData, binsFailed: !binData };
+}
+
+/** Compare card: one column per scenario (all values passed parseCompareSnapshot). */
+function compareView(c: CompareSnapshot): CardView {
+  const pct = (v: number) => `${Math.abs(v) >= 100 ? Math.round(v) : v.toFixed(1)}%`;
+  const colors = ["#2dd4bf", "#a78bfa", "#fbbf24"];
+  return {
+    pair: c.pair ?? "Metric pool",
+    chain: c.chainId !== null ? (CHAINS[c.chainId]?.name ?? null) : null,
+    plan: `Range comparison · ${c.days} days`,
+    stats: null,
+    columns: c.cols.map((col, i) => ({
+      label: "ABC"[i],
+      color: colors[i],
+      title: col.pair ?? `#${col.from} → #${col.to}`,
+      range: col.pair ? `#${col.from} → #${col.to}` : `${col.to - col.from + 1} bins`,
+      fee: pct(col.feeApr),
+      net: col.netApr === null ? "—" : pct(col.netApr),
+      netColor: col.netApr === null ? COLORS.faint : col.netApr < 0 ? COLORS.bad : COLORS.good,
+      fees: `+${fmtUsd(col.fees)}`,
+    })),
+    asOf: new Date(`${c.date}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }),
+    kicker: "Compare · Metric",
+  };
 }
 
 /** Top-5 card: rows rendered as a ranked list (all values passed parseTopSnapshot). */
@@ -227,15 +260,39 @@ function Card({ view }: { view: CardView }) {
         <div style={{ display: "flex", fontSize: 22, color: COLORS.faint }}>{view.kicker ?? "LP plan · Metric pools"}</div>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 20, marginTop: view.list ? 28 : 56 }}>
-        <div style={{ display: "flex", fontSize: view.list ? 48 : 64, fontWeight: 700, letterSpacing: -2 }}>{view.pair}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 20, marginTop: view.list ? 28 : view.columns ? 20 : 56 }}>
+        <div style={{ display: "flex", fontSize: view.list ? 48 : view.columns ? 52 : 64, fontWeight: 700, letterSpacing: -2 }}>{view.pair}</div>
         {view.chain && (
           <div style={{ display: "flex", fontSize: 24, color: COLORS.muted, background: "#1e232c", borderRadius: 10, padding: "6px 14px" }}>{view.chain}</div>
         )}
       </div>
-      <div style={{ display: "flex", fontSize: view.list ? 24 : 28, color: COLORS.muted, marginTop: view.list ? 6 : 12 }}>{view.plan}</div>
+      <div style={{ display: "flex", fontSize: view.list || view.columns ? 24 : 28, color: COLORS.muted, marginTop: view.list || view.columns ? 6 : 12 }}>{view.plan}</div>
 
-      {view.list ? (
+      {view.columns ? (
+        <div style={{ display: "flex", flexShrink: 0, gap: 20, marginTop: 24 }}>
+          {view.columns.map((c) => (
+            <div key={c.label} style={{ display: "flex", flexDirection: "column", flex: 1, background: COLORS.surface, borderRadius: 18, padding: "14px 24px 16px", borderTop: `5px solid ${c.color}` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 24 }}>
+                <div style={{ display: "flex", color: c.color, fontWeight: 700 }}>{c.label}</div>
+                <div style={{ display: "flex", color: COLORS.text, fontWeight: 700 }}>{c.title}</div>
+              </div>
+              <div style={{ display: "flex", fontSize: 18, color: COLORS.faint, marginTop: 2 }}>{c.range}</div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 14, fontSize: 20, color: COLORS.faint }}>
+                <div style={{ display: "flex" }}>Fee APR</div>
+                <div style={{ display: "flex", color: COLORS.accent, fontWeight: 700, fontSize: 28 }}>{c.fee}</div>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 20, color: COLORS.faint }}>
+                <div style={{ display: "flex" }}>Net APR</div>
+                <div style={{ display: "flex", color: c.netColor, fontWeight: 700, fontSize: 28 }}>{c.net}</div>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 20, color: COLORS.faint }}>
+                <div style={{ display: "flex" }}>Est. fees</div>
+                <div style={{ display: "flex", color: COLORS.text, fontWeight: 700, fontSize: 28 }}>{c.fees}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : view.list ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 18 }}>
           {view.list.map((r) => (
             <div key={r.rank} style={{ display: "flex", flexShrink: 0, alignItems: "center", background: COLORS.surface, borderRadius: 12, padding: "6px 24px", fontSize: 27 }}>

@@ -44,6 +44,19 @@ Think *Poolfish (uniswap.fish) for Metric*.
 - Motion: count-up numbers, staggered hero entrance, growing bars and an animated range overlay (framer-motion). All of it is disabled under `prefers-reduced-motion`.
 - Shareable URL, e.g. `?chain=56&pool=0x..&amount=1000&days=30&from=-8&to=7&strategy=uniform&period=7d`. A `preset=80|90|95` parameter keeps an auto preset live.
 
+## Compare ranges (`/compare`)
+
+Up to three ranges (A, B, C) side by side for the same deposit, duration and data period. Open it from the planner's "Compare ranges" link; it starts with Narrow 80%, Medium 90% and Wide 95% of the window's volume.
+
+- Each scenario has its own start/end bin (or a preset) and distribution. "Different pool (same deposit)" compares pool vs pool.
+- **Table** (best value per row highlighted when values differ): range, volume covered, your share of liquidity, fee APR, est. fees (simple and compounded), net APR (historical) and net $, price drag (fee − net APR), tokens needed, idle bins, and a one-line verdict.
+  - A bin is **idle** when it traded less than 0.1% of the window's volume.
+  - Verdicts: highest fees (with a warning when it also covers the least volume), safest (most volume covered), best net, net negative, idle bins; "Balanced" otherwise.
+- **Charts**: the pool's liquidity histogram with one colored overlay per scenario (A teal, B violet, C amber), and fee vs net APR as grouped bars. Hovering a legend item, bar or table column highlights that scenario. On mobile, scenarios are cards you swipe or switch with tabs.
+- **URL**: `/compare?chain=56&pool=0x..&amount=1000&days=30&period=7d&cmp=-3:1:u,-5:3:u,-8:6:c`. Entries are `<from>:<to>:<strategy>` or `p<80|90|95>:<strategy>` (u/c/f), optionally followed by `:<chainId>:<0xpool>`. Invalid entries are dropped.
+- **Share comparison** freezes the columns into the link (`cp, cc, cdays, sd, ca1..3, cb, cf, cn, ce, cq`), validated like the other snapshots, and renders a 2–3 column card.
+- Logic lives in `src/lib/compare.ts` (pure, reuses `calc.ts`).
+
 ## Top pools (`/pools`)
 
 Every Metric pool ranked by **net APR (7d)**. `tradingPnlAprBps7d` is fees + price moves and already includes fees, so the two are never added.
@@ -181,7 +194,8 @@ src/lib/urlState.ts    shareable URL state
 src/lib/plan.ts        URL state + API data → range and estimate (shared by the page and /api/og)
 src/lib/usePlanner.ts  client hook: URL sync, data fetching, derived estimate
 src/app/api/**         proxy route handlers + /api/og share image
+src/lib/compare.ts     compare ranges: metrics, best per row, verdicts, cmp URL encoding (pure)
 src/lib/ranking.ts     top pools: rows, filters, sorting, highlights, weekly post (pure)
 src/lib/portfolio/     portfolio: ABIs, pure model (decoding, positions, value, HODL, status, insights), server loader
-src/components/**      UI (Planner, ConfigPanel, Hero, Histogram, BinDetails, Risk, ShareMenu, PoolPicker, portfolio/*)
+src/components/**      UI (Planner, ConfigPanel, Hero, Histogram, BinDetails, Risk, ShareMenu, PoolPicker, compare/*, portfolio/*)
 ```

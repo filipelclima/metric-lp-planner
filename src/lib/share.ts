@@ -316,3 +316,89 @@ export function freezeTopSnapshot(raw: TopSnapshot, now = Date.now()): TopSnapsh
 export function topOgQuery(snap: TopSnapshot | null): string {
   return snap ? `${topSnapshotParams(snap)}&v=${OG_VERSION}` : `kind=pools&v=${OG_VERSION}`;
 }
+
+// ---------- compare snapshots ----------
+
+/**
+ * Compare-ranges snapshot (the /compare card): 1–3 columns, each a bin range + fee APR % + net APR %
+ * (optional) + est. fees $ for the duration, optionally with its own pool pair. Plus pool pair, chain,
+ * duration and date. Params: cp, cc, cdays, sd, and per column i: ca{i}, cb{i}, cf{i}, cn{i}, ce{i}, cq{i}.
+ */
+export interface CompareSnapshot {
+  pair: string | null;
+  chainId: number | null;
+  days: number;
+  date: string;
+  cols: { from: number; to: number; feeApr: number; netApr: number | null; fees: number; pair: string | null }[];
+}
+
+const BIN = /^-?\d{1,6}$/;
+
+export function parseCompareSnapshot(q: Params, now = Date.now()): CompareSnapshot | null {
+  const sd = q.get("sd");
+  const day = sd === null ? null : date(sd, now);
+  const cdays = q.get("cdays");
+  if (day === null || cdays === null || q.get("ca1") === null) return null;
+  const days = num(cdays, 1, 3650);
+  if (days === null || !Number.isInteger(days)) return null;
+  const pairOk = (p: string | null) => p === null || (p.length <= 25 && PAIR.test(p));
+  const cp = q.get("cp");
+  if (!pairOk(cp)) return null;
+  const cc = q.get("cc");
+  if (cc !== null && (!/^\d+$/.test(cc) || !TOP_CHAINS.includes(Number(cc)))) return null;
+  const cols: CompareSnapshot["cols"] = [];
+  for (let i = 1; i <= 3; i++) {
+    const ca = q.get(`ca${i}`);
+    if (ca === null) {
+      for (let j = i; j <= 3; j++) if (["ca", "cb", "cf", "cn", "ce", "cq"].some((k) => q.get(`${k}${j}`) !== null)) return null;
+      break;
+    }
+    const cb = q.get(`cb${i}`);
+    const cf = q.get(`cf${i}`);
+    const cn = q.get(`cn${i}`);
+    const ce = q.get(`ce${i}`);
+    const cq = q.get(`cq${i}`);
+    if (cb === null || cf === null || ce === null || !BIN.test(ca) || !BIN.test(cb) || !pairOk(cq)) return null;
+    const feeApr = num(cf, -1e6, 1e6);
+    const netApr = cn === null ? null : num(cn, -1e6, 1e6);
+    const fees = num(ce, -1e9, 1e9);
+    if (feeApr === null || fees === null || (cn !== null && netApr === null)) return null;
+    const a = Number(ca);
+    const b = Number(cb);
+    cols.push({ from: Math.min(a, b), to: Math.max(a, b), feeApr, netApr, fees, pair: cq });
+  }
+  return { pair: cp, chainId: cc === null ? null : Number(cc), days, date: day, cols };
+}
+
+export function compareSnapshotParams(s: CompareSnapshot): URLSearchParams {
+  const q = new URLSearchParams();
+  if (s.pair) q.set("cp", s.pair);
+  if (s.chainId !== null) q.set("cc", String(s.chainId));
+  q.set("cdays", String(s.days));
+  s.cols.slice(0, 3).forEach((c, i) => {
+    const n = i + 1;
+    q.set(`ca${n}`, String(c.from));
+    q.set(`cb${n}`, String(c.to));
+    q.set(`cf${n}`, r2(c.feeApr).toFixed(2));
+    if (c.netApr !== null) q.set(`cn${n}`, r2(c.netApr).toFixed(2));
+    q.set(`ce${n}`, r2(c.fees).toFixed(2));
+    if (c.pair) q.set(`cq${n}`, c.pair);
+  });
+  q.set("sd", s.date);
+  return q;
+}
+
+/** Rounds and validates; drops pair labels that don't validate and non-finite optional values. */
+export function freezeCompareSnapshot(raw: CompareSnapshot, now = Date.now()): CompareSnapshot | null {
+  const okPair = (p: string | null) => (p !== null && p.length <= 25 && PAIR.test(p) ? p : null);
+  const cols = raw.cols
+    .filter((c) => Number.isFinite(c.feeApr) && Number.isFinite(c.fees))
+    .slice(0, 3)
+    .map((c) => ({ ...c, netApr: c.netApr !== null && Number.isFinite(c.netApr) ? c.netApr : null, pair: okPair(c.pair) }));
+  if (cols.length === 0) return null;
+  return parseCompareSnapshot(compareSnapshotParams({ ...raw, pair: okPair(raw.pair), cols }), now);
+}
+
+export function compareOgQuery(snap: CompareSnapshot | null): string {
+  return snap ? `${compareSnapshotParams(snap)}&v=${OG_VERSION}` : `kind=compare&v=${OG_VERSION}`;
+}
