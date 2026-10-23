@@ -1,0 +1,71 @@
+# Changelog
+
+One entry per task, newest first. Each entry lists what changed, what couldn't be tested, and decisions worth reviewing. See `CLAUDE.md` for the rule.
+
+## Entries
+
+### 2026-10-23 · `this commit` · Changelog and CLAUDE.md
+- **Changed:** Added `CHANGELOG.md`, with a backfill of earlier work below, and `CLAUDE.md` with the rule to append an entry after every task and push it with the code.
+- **Couldn't test:** Nothing (docs only).
+- **Review:** Workflow is two commits per task (code, then a changelog entry citing the code commit's hash), pushed together. The backfilled entries were reconstructed from the commit history and session notes.
+
+### 2026-10-23 · `34aaa84` · Portfolio: consistent fees/APR, "Your result"
+- **Changed:**
+  - Est. fees since deposit (from 7d rates), with the deposit age shown.
+  - "Your fee APR" at the current share, consistent with the fee estimate by construction.
+  - The bins' 7d fee/net APR moved to a secondary "(pool)" row.
+  - A "Your result" row: PnL vs HODL in $ and annualized after 1 day.
+- **Couldn't test:** Live data (`api.metric.xyz` and `rpc.metric.xyz` are blocked in the sandbox). Verified against a local mock only.
+- **Review:**
+  - The live $0.31 fee estimate likely stays. The old 300% APR was the bins' APR on 7d average liquidity, which overstates a fresh position in thin bins.
+  - app.metric.xyz's "Edge ≈ $2" isn't reconciled.
+  - Option not taken: use the 24h window for the most recent day.
+
+### 2026-10-23 · `97d3e83` · Portfolio page
+- **Changed:** `/portfolio?wallet=` and `/api/positions`:
+  - Positions from `eth_getLogs`, Data Provider reads (Multicall3 with batched fallback) and 7d analytics.
+  - Value, fees, HODL/PnL, status, insights, bin strip.
+  - A portfolio share card that never shows the wallet.
+  - Header nav.
+- **Couldn't test:** Live RPC and API (blocked); end-to-end only against a synthetic mock.
+- **Review:**
+  - The "scaled" unit is calibrated at runtime from `binState` vs `reserveFiat`, falling back to 1e18 and "approx.".
+  - "Try an example" needs `NEXT_PUBLIC_EXAMPLE_WALLET`.
+  - No curator-fee-change insight (not detectable).
+  - The TS target was raised to ES2020.
+  - Optional `METRIC_*_BASE` env overrides were added for testing.
+
+### 2026-10-23 · `cefeafe` · Snapshot sharing
+- **Changed:**
+  - Share freezes the on-screen numbers into the link (`sf/sa/sn/sd/sp/sw`) with a unique `s` id.
+  - `/api/og` renders snapshots without calling Metric.
+  - The share menu pre-warms the image.
+  - Strict validation of snapshot params.
+- **Couldn't test:** On X itself; verified with a local production build and a Twitterbot user agent.
+- **Review:** The bin percentages on the card assume uniform bin width (`sw`). The removed `pair` param was an arbitrary-text vector.
+
+### 2026-10-23 · `565074e` / `debc73f` · Crawler-proof share image
+- **Changed:**
+  - Edge `/api/og` with a 2s budget and an always-200 PNG.
+  - Long cache for live cards, 60s for fallbacks.
+  - `htmlLimitedBots` so meta tags render in `<head>`.
+  - A canonical image URL, `twitter:site`/`creator`, `robots.txt` and `npm run check-share`.
+- **Couldn't test:** The live deploy (`vercel.app` blocked in the sandbox).
+- **Review:** Fallback cards are cached for only 60s, on purpose.
+
+### 2026-10-22 · `174bdf2` → `b3b5f9e` · Redesign and polish
+- **Changed:**
+  - Results-first layout with a hero, projection chart, bin ruler and risk drawer.
+  - framer-motion and Geist fonts.
+  - Net shown as a dotted line in the projection.
+  - Pool stats and How it works cards.
+- **Couldn't test:** Live data; synthetic mocks only.
+- **Review:** The bottom sheet has no swipe-to-close.
+
+### 2026-10-22 · `1562c64` → `a0f0627` · Planner
+- **Changed:**
+  - The initial Binwise planner: per-bin fee model, presets, strategies, histogram, bin plan, risk panel and URL state.
+  - Matched to the real API shapes, with the aprBps check on real fixtures.
+  - Net (trading PnL) APR replaces "fees + PnL".
+- **Couldn't test:** The live API at the time (blocked); real fixtures were supplied manually.
+- **Review:** The black tier shows the same warning as red.
