@@ -46,34 +46,24 @@ export default function PositionCard({ p }: { p: PositionView }) {
       <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Stat label="Value" value={fmtUsd(p.valueUsd)} big />
         <Stat
-          label="Est. fees since deposit"
+          label={p.heldDays !== null && p.heldDays > p.windowDays ? "Est. fees (last 7d)" : "Est. fees since deposit"}
           sub="from 7d rates"
           value={fmtUsd(p.feesUsd)}
-          tip="Σ your share of each bin × that bin's LP fees over the last 7d × min(1, time since your first deposit / 7d). Shares are read at the current block."
+          tip={FEES_TIP}
         />
         <Stat
           label="Your fee APR"
-          sub="at current share"
+          sub="7d"
           value={fmtApr(p.yourFeeApr)}
           tone="text-accent"
-          tip="Your share of each bin's 7d fee rate × 365 / your value. Consistent with the fee estimate: fees ≈ APR × value × days held / 365."
+          tip={APR_TIP}
         />
       </div>
 
       <ResultRow pnlUsd={p.pnlUsd} pnlApprox={p.pnlApprox} annualized={p.pnlAnnualized} tip={scaleTip(p)} />
 
       <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-[12px] text-faint">
-        <PoolStat
-          label="Bins' 7d fee APR (pool)"
-          value={p.binsFeeApr}
-          tip="Metric's own 7d fee APR for the bins you hold (fees ÷ the bins' 7d average liquidity), weighted by your value. Pool history, not your result. Higher than your fee APR when the bins' liquidity grew recently, e.g. from your own deposit."
-        />
-        <PoolStat
-          label="Bins' 7d net APR (pool)"
-          value={p.binsNetApr}
-          signed
-          tip="Metric's 7d trading-PnL APR (fees + price moves) for the bins you hold, weighted by your value. Pool history, not your result: see “Your result” for your PnL vs HODL."
-        />
+        <PoolStat label="Bins' 7d net APR (pool)" value={p.binsNetApr} estUsd={p.estNetUsd} signed tip={NET_TIP} />
       </div>
 
       <PositionStrip p={p} />
@@ -172,12 +162,23 @@ export function ResultRow({ pnlUsd, pnlApprox, annualized, tip }: { pnlUsd: numb
   );
 }
 
-export function PoolStat({ label, value, tip, signed }: { label: string; value: number | null; tip: string; signed?: boolean }) {
+export const FEES_TIP =
+  "Based on each bin's 7d APR: Σ your value in the bin × its 7d fee APR × days held (capped at 7d) / 365. Uses Metric's own rate (fees ÷ the bin's 7d average liquidity), so it doesn't undercount when bin liquidity grew during the window. If the growth was mostly your own fresh deposit, it can overstate.";
+export const APR_TIP = "Each bin's 7d fee APR, weighted by your value in it. Consistent with the fee estimate: fees = APR × value × days held / 365.";
+export const NET_TIP =
+  "Metric's 7d trading-PnL APR (fees + price moves) of the bins you hold, weighted by your value; the $ figure applies it to your value over the time held (capped at 7d). Pool history, not your result: see “Your result” for your PnL vs HODL.";
+
+export function PoolStat({ label, value, tip, signed, estUsd }: { label: string; value: number | null; tip: string; signed?: boolean; estUsd?: number | null }) {
   const tone = value === null ? "" : signed ? (value < 0 ? "text-bad/80" : "text-good/80") : "text-muted";
   return (
     <span className="flex items-center gap-1.5">
       {label}
       <span className={`num ${tone}`}>{fmtApr(value)}</span>
+      {estUsd !== undefined && estUsd !== null && (
+        <span className="text-faint">
+          (≈ <span className="num">{signedUsd(estUsd)}</span> over your time held)
+        </span>
+      )}
       <InfoTip>{tip}</InfoTip>
     </span>
   );

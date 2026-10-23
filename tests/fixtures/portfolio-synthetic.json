@@ -13,7 +13,7 @@
   ],
   "expected": {
     "valueUsd": 1750,
-    "feesUsd": 15.7625,
+    "feesUsd": 15.762466,
     "usdPerScaled0": 2.5e-18,
     "usdPerScaled1": 1e-18,
     "impliedExp0": 18,

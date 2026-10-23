@@ -7,6 +7,7 @@ export interface PositionBinView {
   valueUsd: number;
   feesUsd: number;
   dailyFeesUsd: number;
+  netUsd: number | null;
   aprBps: number | null;
   pnlAprBps: number | null;
   midPct: number;
@@ -27,17 +28,18 @@ export interface PositionView {
   /** Lowest..highest bin still holding shares. */
   range: { from: number; to: number } | null;
   valueUsd: number;
-  /** Est. fees since deposit, from the 7d fee rates at the current share. */
+  /** Est. fees since deposit (capped at the 7d window), from each bin's 7d fee APR × your value. */
   feesUsd: number;
+  /** Est. net (fees + price moves) over the same time, from each bin's 7d net APR; null without data. */
+  estNetUsd: number | null;
   hodlUsd: number | null;
   pnlUsd: number | null;
   pnlApprox: boolean;
   /** PnL vs HODL annualized (fraction); null when held < 1 day. */
   pnlAnnualized: number | null;
-  /** Your fee APR at the current share (consistent with feesUsd). */
+  /** Value-weighted 7d fee APR of your bins (consistent with feesUsd). */
   yourFeeApr: number | null;
-  /** The bins' own 7d fee / net APR (pool-level history, value-weighted by your holdings). */
-  binsFeeApr: number | null;
+  /** The bins' own 7d net APR (pool history, value-weighted by your holdings). */
   binsNetApr: number | null;
   heldDays: number | null;
   status: RangeStatus;
@@ -55,8 +57,8 @@ export interface PortfolioSummary {
   pnlApprox: boolean;
   pnlAnnualized: number | null;
   yourFeeApr: number | null;
-  binsFeeApr: number | null;
   binsNetApr: number | null;
+  estNetUsd: number | null;
   /** HODL-weighted average holding time. */
   heldDays: number | null;
   count: number;

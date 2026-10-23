@@ -6,6 +6,7 @@ import { LIQUIDITY_ADDED, LIQUIDITY_ADDED_TOPIC, LIQUIDITY_REMOVED, LIQUIDITY_RE
 import {
   annualizedPnl,
   calibrateScale,
+  estNetUsd,
   depositAgeText,
   heldDaysSince,
   userFeeApr,
@@ -114,14 +115,14 @@ describe("value math (synthetic fixture)", () => {
     expect(shareOf(5n, 0n)).toBe(0);
   });
 
-  it("bin value = share × (reserve0Fiat + reserve1Fiat); fees capped by position age", () => {
+  it("bin value = share × (reserve0Fiat + reserve1Fiat); fees = value × 7d fee APR × days held / 365", () => {
     const v = valueBins(bins, fx.windowDays, fx.positionAgeDays);
     // 0.25×4000 + 0.1×5000 + 0.25×1000 + 0 = 1750
     expect(v.reduce((s, b) => s + b.valueUsd, 0)).toBeCloseTo(fx.expected.valueUsd, 9);
-    // (0.25×70 + 0.1×140 + 0.25×0.1) × 3.5/7
-    expect(v.reduce((s, b) => s + b.feesUsd, 0)).toBeCloseTo(fx.expected.feesUsd, 9);
+    // (1000×0.9125 + 500×1.46 + 250×0.0052) × 3.5 / 365
+    expect(v.reduce((s, b) => s + b.feesUsd, 0)).toBeCloseTo(fx.expected.feesUsd, 6);
     // older than the window → full window fees
-    expect(valueBins(bins, 7, 30).reduce((s, b) => s + b.feesUsd, 0)).toBeCloseTo(fx.expected.feesUsd * 2, 9);
+    expect(valueBins(bins, 7, 30).reduce((s, b) => s + b.feesUsd, 0)).toBeCloseTo(fx.expected.feesUsd * 2, 5);
   });
 
   it("calibrates the scaled unit from bin balances vs reserveFiat", () => {
@@ -174,6 +175,7 @@ describe("insights", () => {
     valueUsd,
     feesUsd: 0,
     dailyFeesUsd: 0,
+    netUsd: null,
     aprBps,
     pnlAprBps,
   });
@@ -211,52 +213,65 @@ describe("links", () => {
   });
 });
 
-describe("fees vs APR consistency", () => {
-  /** 16 bins; aprBps derived exactly as Metric does: window fees / days × 365 / average liquidity. */
-  function bins(reserveOverAvg: number): BinInput[] {
+describe("fee and net estimates from each bin's 7d APR", () => {
+  const held = 28.5 / 24;
+  /** A uniform position: the same user share in 16 bins with known aprBps / pnlAprBps. */
+  function bins(liquidityMultiplier = 1): BinInput[] {
     return Array.from({ length: 16 }, (_, i) => {
-      const avgLiq = 40 + 15 * i;
-      const reserve = avgLiq * reserveOverAvg;
-      const fees = 0.4 + 0.1 * i; // over the 7d window
+      const reserve = (40 + 15 * i) * liquidityMultiplier;
       return {
         idx: i - 3,
-        userShares: BigInt(10 + i) * 10n ** 18n,
-        totalShares: BigInt(40 + 3 * i) * 10n ** 18n,
+        userShares: 25n * 10n ** 18n,
+        totalShares: BigInt(100 * liquidityMultiplier) * 10n ** 18n, // 25% share, diluted when liquidity grows
         balance0Scaled: 0n,
         balance1Scaled: 0n,
         reserve0Fiat: reserve / 2,
         reserve1Fiat: reserve / 2,
-        lpFeesFiat: fees,
-        aprBps: Math.round(((fees / 7) * 365 * 1e4) / avgLiq),
-        pnlAprBps: null,
+        lpFeesFiat: 0.4 + 0.1 * i, // window fees (no longer used for the estimate)
+        aprBps: 20_000 + 2_000 * i,
+        pnlAprBps: i % 4 === 0 ? null : -5_000 + 1_000 * i,
       };
     });
   }
-  const held = 28.5 / 24;
+  const sum = (v: ReturnType<typeof valueBins>, f: (b: ReturnType<typeof valueBins>[number]) => number) => v.reduce((s, b) => s + f(b), 0);
 
-  it("uniform bins: est. fees ≈ fee APR × value × days held / 365 (within 5%), for both APRs", () => {
-    const v = valueBins(bins(1), 7, held);
-    const value = v.reduce((s, b) => s + b.valueUsd, 0);
-    const fees = v.reduce((s, b) => s + b.feesUsd, 0);
-    for (const apr of [userFeeApr(v)!, weightedApr(v, (b) => b.aprBps)!]) {
-      const implied = (apr * value * held) / 365;
-      expect(Math.abs(fees / implied - 1)).toBeLessThan(0.05);
-    }
+  it("estFees = Σ value_b × aprBps_b/1e4 × heldDays/365, and equals your fee APR × value × heldDays/365", () => {
+    const input = bins();
+    const v = valueBins(input, 7, held);
+    const expected = input.reduce((s, b) => s + 0.25 * (b.reserve0Fiat + b.reserve1Fiat) * (b.aprBps! / 1e4) * (held / 365), 0);
+    expect(sum(v, (b) => b.feesUsd)).toBeCloseTo(expected, 12);
+    const apr = userFeeApr(v)!;
+    expect(apr).toBeCloseTo(sum(v, (b) => b.valueUsd * (b.aprBps! / 1e4)) / sum(v, (b) => b.valueUsd), 12);
+    expect(sum(v, (b) => b.feesUsd)).toBeCloseTo((apr * sum(v, (b) => b.valueUsd) * held) / 365, 12);
   });
 
-  it("reserves above the 7d average (fresh liquidity): your fee APR stays consistent, the bins' APR overstates", () => {
-    const v = valueBins(bins(4.2), 7, held);
-    const value = v.reduce((s, b) => s + b.valueUsd, 0);
-    const fees = v.reduce((s, b) => s + b.feesUsd, 0);
-    expect((userFeeApr(v)! * value * held) / 365).toBeCloseTo(fees, 9);
-    const binsImplied = (weightedApr(v, (b) => b.aprBps)! * value * held) / 365;
-    expect(binsImplied / fees).toBeCloseTo(4.2, 1);
+  it("net uses pnlAprBps the same way and skips bins without it", () => {
+    const input = bins();
+    const v = valueBins(input, 7, held);
+    const expected = input
+      .filter((b) => b.pnlAprBps !== null)
+      .reduce((s, b) => s + 0.25 * (b.reserve0Fiat + b.reserve1Fiat) * (b.pnlAprBps! / 1e4) * (held / 365), 0);
+    expect(estNetUsd(v)).toBeCloseTo(expected, 12);
+    expect(estNetUsd(valueBins(input.map((b) => ({ ...b, pnlAprBps: null })), 7, held))).toBeNull();
   });
 
-  it("fees stop growing once the position is older than the window", () => {
-    const v = valueBins(bins(1), 7, 30);
-    const full = v.reduce((s, b) => s + b.feesUsd, 0);
-    expect(full).toBeCloseTo(v.reduce((s, b) => s + b.dailyFeesUsd, 0) * 7, 9);
+  it("bin liquidity doubling during the window doesn't drop the estimate (current share halves, value and rate don't)", () => {
+    const before = valueBins(bins(1), 7, held);
+    const after = valueBins(bins(2), 7, held); // others doubled liquidity: share 25% → 12.5%, same aprBps
+    expect(after[0].share).toBeCloseTo(before[0].share / 2, 12);
+    expect(sum(after, (b) => b.feesUsd)).toBeGreaterThanOrEqual(sum(before, (b) => b.feesUsd) - 1e-12);
+    // …whereas current share × window fees (the old estimate) would have halved
+    const shareBased = (v: ReturnType<typeof valueBins>, input: BinInput[]) => v.reduce((s, b, i) => s + b.share * input[i].lpFeesFiat * (held / 7), 0);
+    expect(shareBased(after, bins(2))).toBeCloseTo(shareBased(before, bins(1)) / 2, 12);
+    expect(sum(after, (b) => b.feesUsd)).toBeGreaterThan(shareBased(after, bins(2)));
+  });
+
+  it("caps held days at the window and counts missing aprBps as 0", () => {
+    const input = bins();
+    expect(sum(valueBins(input, 7, 30), (b) => b.feesUsd)).toBeCloseTo(sum(valueBins(input, 7, 7), (b) => b.feesUsd), 12);
+    const v = valueBins(input.map((b, i) => (i === 0 ? { ...b, aprBps: null } : b)), 7, held);
+    expect(v[0].feesUsd).toBe(0);
+    expect(sum(v, (b) => b.feesUsd)).toBeCloseTo((userFeeApr(v)! * sum(v, (b) => b.valueUsd) * held) / 365, 12);
   });
 });
 

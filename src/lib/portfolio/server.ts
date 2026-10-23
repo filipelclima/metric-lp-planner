@@ -8,6 +8,7 @@ import { DATA_PROVIDER, DATA_PROVIDER_ABI, LIQUIDITY_ADDED_TOPIC, LIQUIDITY_REMO
 import {
   annualizedPnl,
   calibrateScale,
+  estNetUsd,
   heldDaysSince,
   userFeeApr,
   type BinValue,
@@ -213,8 +214,8 @@ function buildView(
     pnlApprox: hodl.approx,
     pnlAnnualized: annualizedPnl(pnlUsd, hodl.usd, ageDays),
     yourFeeApr: userFeeApr(vb),
-    binsFeeApr: weightedApr(vb, (b) => b.aprBps),
     binsNetApr: weightedApr(vb, (b) => b.pnlAprBps),
+    estNetUsd: estNetUsd(vb),
     heldDays: ageDays,
     status,
     insights: insights({ bins: vb, curBinIdx, status, pnlUsd, pnlApprox: hodl.approx }),
@@ -242,8 +243,8 @@ export function summarize(positions: PositionView[]): PortfolioSummary {
     pnlApprox: positions.some((p) => p.pnlApprox || p.pnlUsd === null),
     pnlAnnualized: annualizedPnl(pnlUsd, hodlUsd, heldDays),
     yourFeeApr: userFeeApr(all),
-    binsFeeApr: weightedApr(all, (b) => b.aprBps),
     binsNetApr: weightedApr(all, (b) => b.pnlAprBps),
+    estNetUsd: positions.some((p) => p.estNetUsd !== null) ? sum((p) => p.estNetUsd ?? 0) : null,
     heldDays,
     count: positions.length,
   };

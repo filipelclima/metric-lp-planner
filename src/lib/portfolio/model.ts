@@ -125,33 +125,48 @@ export interface BinValue {
   idx: number;
   share: number;
   valueUsd: number;
-  /** Est. fees since deposit: share × window fees × min(1, age / window). */
+  /** Est. fees over the time held (capped at the window), at the bin's own 7d fee APR. */
   feesUsd: number;
-  /** Fee rate at the current share: share × window fees / window days. */
+  /** Fee rate per day at the bin's 7d fee APR: value × aprBps / 1e4 / 365. */
   dailyFeesUsd: number;
+  /** Est. net (fees + price moves) over the same time at the bin's 7d net APR; null without pnlAprBps. */
+  netUsd: number | null;
   aprBps: number | null;
   pnlAprBps: number | null;
 }
 
 /**
  * Bin value = share × (reserve0Fiat + reserve1Fiat), share = userShares / totalShares at the current block.
- * Est. fees since deposit = share × lpFeesFiat over the window × min(1, age / window): the window's fee rate
- * applied to the time the position has existed (same 7d window as the APRs).
+ *
+ * Est. fees = value × (aprBps / 1e4) × min(heldDays, windowDays) / 365, i.e. Metric's own 7d rate for the bin
+ * (fees ÷ the bin's 7d *average* liquidity) applied to your current value. Unlike current share × window
+ * fees, this doesn't undercount when the bin's liquidity grew during the window (current share < average
+ * share). Caveat: if the growth was mostly your own fresh deposit, the bin's average-liquidity rate overstates
+ * what you earned. Net uses pnlAprBps the same way. Bins without aprBps count as 0 fee APR.
  */
 export function valueBins(bins: BinInput[], windowDays: number, positionAgeDays: number | null): BinValue[] {
-  const ageFactor = windowDays > 0 && positionAgeDays !== null ? Math.max(0, Math.min(1, positionAgeDays / windowDays)) : 1;
+  const days = positionAgeDays === null ? windowDays : Math.max(0, Math.min(positionAgeDays, windowDays));
   return bins.map((b) => {
     const share = shareOf(b.userShares, b.totalShares);
+    const valueUsd = share * (b.reserve0Fiat + b.reserve1Fiat);
+    const feeApr = (b.aprBps ?? 0) / 1e4;
     return {
       idx: b.idx,
       share,
-      valueUsd: share * (b.reserve0Fiat + b.reserve1Fiat),
-      feesUsd: share * b.lpFeesFiat * ageFactor,
-      dailyFeesUsd: windowDays > 0 ? (share * b.lpFeesFiat) / windowDays : 0,
+      valueUsd,
+      feesUsd: (valueUsd * feeApr * days) / 365,
+      dailyFeesUsd: (valueUsd * feeApr) / 365,
+      netUsd: b.pnlAprBps === null ? null : (valueUsd * (b.pnlAprBps / 1e4) * days) / 365,
       aprBps: b.aprBps,
       pnlAprBps: b.pnlAprBps,
     };
   });
+}
+
+/** Σ est. net over bins with pnlAprBps (nulls skipped); null if no bin has one. */
+export function estNetUsd(bins: BinValue[]): number | null {
+  const withNet = bins.filter((b) => b.netUsd !== null && b.valueUsd > 0);
+  return withNet.length ? withNet.reduce((s, b) => s + b.netUsd!, 0) : null;
 }
 
 // ---------- scale calibration + HODL ----------
@@ -256,10 +271,8 @@ export function weightedApr(bins: BinValue[], pick: (b: BinValue) => number | nu
 }
 
 /**
- * Your fee APR at the current share: Σ share × daily fees × 365 / value. Consistent with the fee estimate
- * by construction (fees ≈ APR × value × days / 365 while days ≤ window). The bins' own aprBps divides by
- * their 7d *average* liquidity instead, so it overstates your rate when the bins' liquidity grew recently —
- * e.g. when your own deposit is a large part of thin bins.
+ * Your fee APR: Σ value_b × (aprBps_b / 1e4) / Σ value_b — each bin's 7d fee APR weighted by your value in it
+ * (bins without aprBps count as 0). Consistent with the fee estimate: fees = APR × value × days / 365.
  */
 export function userFeeApr(bins: BinValue[]): number | null {
   const value = bins.reduce((s, b) => s + b.valueUsd, 0);

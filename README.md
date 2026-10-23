@@ -57,10 +57,13 @@ Paste any wallet to see its Metric LP positions. It's read-only: no wallet conne
   - They go through Multicall3. Any call it reports as failed, including all of them on a chain without Multicall3, is retried as plain `eth_call`s in JSON-RPC batches.
   - Chains run in parallel. If one chain fails, it's reported and the others still load.
 - **Value**: per bin, `positionBinShares / binTotalShares × (token0.reserveFiat + token1.reserveFiat)`, using `/analytics/bins?period=7d`.
-- **Est. fees since deposit (from 7d rates)**: `Σ share_b × lpFeesFiat_b × min(1, age / window)`. Shares are read at the current block, the window is the same 7d one the APRs use, and age runs from the block timestamp of the first deposit (shown as "deposited 1.2 days ago").
-- **Your fee APR (at current share)**: `Σ share_b × lpFeesFiat_b / windowDays × 365 / value`. It's consistent with the fee estimate by construction (fees ≈ APR × value × days held / 365).
-  - The bins' own 7d APRs are shown separately as "Bins' 7d fee / net APR (pool)": pool history, not your result.
-  - Metric's `aprBps` divides by the bins' 7d *average* liquidity. When current reserves are well above that average (for example, your own recent deposit is a big part of thin bins), the bins' APR overstates what your position earns.
+- **Est. fees since deposit (from 7d rates)**: `Σ value_b × (aprBps_b / 10000) × heldDays / 365`.
+  - `value_b = share_b × (reserveFiat0_b + reserveFiat1_b)`, with shares at the current block.
+  - `heldDays` runs from the first deposit's block timestamp, capped at the 7d window. When the position is older than 7d, the label reads "last 7d".
+  - Using Metric's own per-bin rate (fees ÷ the bin's 7d *average* liquidity) avoids undercounting when bin liquidity grew during the window. Current share × window fees would undercount there, because the current share is below the average share.
+  - Caveat: if the growth was mostly your own fresh deposit, the average-liquidity rate can overstate.
+- **Your fee APR (7d)**: `Σ value_b × aprBps_b / Σ value_b`. It's consistent with the fee estimate (fees = APR × value × days / 365).
+- **Bins' 7d net APR (pool)**: the same weighting with `pnlAprBps` (bins without it are skipped), shown with the $ it implies over your time held. Pool history, not your result.
 - **Your result**: PnL vs HODL in $, plus annualized (`PnL / HODL value / days held × 365`, shown after 1 day).
 - **PnL vs HODL**: current value minus the worth of the net deposited tokens.
   - Net deposited = Σ|Δ| from `LiquidityAdded` − Σ|Δ| from `LiquidityRemoved`, per token, in "scaled" units.
