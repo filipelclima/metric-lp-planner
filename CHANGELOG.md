@@ -4,6 +4,27 @@ One entry per task, newest first. Each entry lists what changed, what couldn't b
 
 ## Entries
 
+### 2026-10-23 · `2fed16d` · Top pools: resilient fetch, price-driven chip, safer highlights
+- **Changed:**
+  - `/api/pools-ranking` gives each page request a 20s timeout and 2 retries (400ms, 1.2s backoff), and fetches the remaining pages in parallel after the first.
+  - A chain that fails falls back to that server instance's last good rows (`staleChains`). Incomplete responses are `no-store`.
+  - The client retries once silently before showing the error banner.
+  - A "price-driven" chip shows where net APR > 1.5× fee APR.
+  - "Best net APR (fee-driven)" only considers pools with net ≤ fee.
+  - "Most efficient" excludes pools with negative net APR.
+- **Couldn't test:** Live Metric data (blocked in the sandbox). Verified against a local mock:
+  - two cold-start failures are recovered within one call;
+  - 13 pools are fetched over 3 pages, two of them in parallel;
+  - BNB permanently down → `failedChains` + `no-store`;
+  - the client makes 2 calls before the banner;
+  - the chip and both picks work in screenshots.
+
+  The last-good fallback wasn't exercised end to end: Next's 300s fetch cache answers first.
+- **Review:**
+  - The last-good copy is in memory per server instance, so a cold instance with no fetch cache can still miss a chain.
+  - Pools with net between 1× and 1.5× fee APR get no chip, but are also excluded from "Best net APR (fee-driven)".
+  - "Most efficient" still allows pools with unknown net APR.
+
 ### 2026-10-23 · `6e97b77` · Top pools page
 - **Changed:**
   - `/pools` ranks pools by net APR (7d), with sortable columns, fee and net bars, price drag and vol/TVL.
