@@ -4,7 +4,11 @@ import { encodeAbiParameters, encodeEventTopics, pad, type Hex } from "viem";
 import { describe, expect, it } from "vitest";
 import { LIQUIDITY_ADDED, LIQUIDITY_ADDED_TOPIC, LIQUIDITY_REMOVED, LIQUIDITY_REMOVED_TOPIC } from "@/lib/portfolio/abi";
 import {
+  annualizedPnl,
   calibrateScale,
+  depositAgeText,
+  heldDaysSince,
+  userFeeApr,
   decodeLiquidityLog,
   groupPositions,
   hodlValue,
@@ -164,7 +168,15 @@ describe("status", () => {
 });
 
 describe("insights", () => {
-  const b = (idx: number, valueUsd: number, aprBps: number | null, pnlAprBps: number | null) => ({ idx, share: 0.1, valueUsd, feesUsd: 0, aprBps, pnlAprBps });
+  const b = (idx: number, valueUsd: number, aprBps: number | null, pnlAprBps: number | null) => ({
+    idx,
+    share: 0.1,
+    valueUsd,
+    feesUsd: 0,
+    dailyFeesUsd: 0,
+    aprBps,
+    pnlAprBps,
+  });
 
   it("flags out of range, idle runs, a very negative net bin and HODL outperformance", () => {
     const list = insights({
@@ -196,5 +208,72 @@ describe("insights", () => {
 describe("links", () => {
   it("re-plan link carries pool, rounded value and the 90% preset", () => {
     expect(replanUrl(56, POOL, 131.81)).toBe(`/?chain=56&pool=${POOL}&amount=132&days=30&preset=90&strategy=uniform&period=7d`);
+  });
+});
+
+describe("fees vs APR consistency", () => {
+  /** 16 bins; aprBps derived exactly as Metric does: window fees / days × 365 / average liquidity. */
+  function bins(reserveOverAvg: number): BinInput[] {
+    return Array.from({ length: 16 }, (_, i) => {
+      const avgLiq = 40 + 15 * i;
+      const reserve = avgLiq * reserveOverAvg;
+      const fees = 0.4 + 0.1 * i; // over the 7d window
+      return {
+        idx: i - 3,
+        userShares: BigInt(10 + i) * 10n ** 18n,
+        totalShares: BigInt(40 + 3 * i) * 10n ** 18n,
+        balance0Scaled: 0n,
+        balance1Scaled: 0n,
+        reserve0Fiat: reserve / 2,
+        reserve1Fiat: reserve / 2,
+        lpFeesFiat: fees,
+        aprBps: Math.round(((fees / 7) * 365 * 1e4) / avgLiq),
+        pnlAprBps: null,
+      };
+    });
+  }
+  const held = 28.5 / 24;
+
+  it("uniform bins: est. fees ≈ fee APR × value × days held / 365 (within 5%), for both APRs", () => {
+    const v = valueBins(bins(1), 7, held);
+    const value = v.reduce((s, b) => s + b.valueUsd, 0);
+    const fees = v.reduce((s, b) => s + b.feesUsd, 0);
+    for (const apr of [userFeeApr(v)!, weightedApr(v, (b) => b.aprBps)!]) {
+      const implied = (apr * value * held) / 365;
+      expect(Math.abs(fees / implied - 1)).toBeLessThan(0.05);
+    }
+  });
+
+  it("reserves above the 7d average (fresh liquidity): your fee APR stays consistent, the bins' APR overstates", () => {
+    const v = valueBins(bins(4.2), 7, held);
+    const value = v.reduce((s, b) => s + b.valueUsd, 0);
+    const fees = v.reduce((s, b) => s + b.feesUsd, 0);
+    expect((userFeeApr(v)! * value * held) / 365).toBeCloseTo(fees, 9);
+    const binsImplied = (weightedApr(v, (b) => b.aprBps)! * value * held) / 365;
+    expect(binsImplied / fees).toBeCloseTo(4.2, 1);
+  });
+
+  it("fees stop growing once the position is older than the window", () => {
+    const v = valueBins(bins(1), 7, 30);
+    const full = v.reduce((s, b) => s + b.feesUsd, 0);
+    expect(full).toBeCloseTo(v.reduce((s, b) => s + b.dailyFeesUsd, 0) * 7, 9);
+  });
+});
+
+describe("your result", () => {
+  it("annualizes PnL vs HODL only after a day", () => {
+    expect(annualizedPnl(-0.17, 131.79, 28.5 / 24)).toBeCloseTo((-0.17 / 131.79 / (28.5 / 24)) * 365, 12);
+    expect(annualizedPnl(5, 100, 0.9)).toBeNull();
+    expect(annualizedPnl(null, 100, 3)).toBeNull();
+    expect(annualizedPnl(5, 0, 3)).toBeNull();
+  });
+
+  it("deposit age text and held days", () => {
+    expect(heldDaysSince(1000, 1000 + 28.5 * 3600)).toBeCloseTo(1.1875, 9);
+    expect(heldDaysSince(null, 5)).toBeNull();
+    expect(depositAgeText(28.5 / 24)).toBe("deposited 1.2 days ago");
+    expect(depositAgeText(5 / 24)).toBe("deposited 5 hours ago");
+    expect(depositAgeText(0.01)).toBe("deposited 1 hour ago");
+    expect(depositAgeText(45.3)).toBe("deposited 45 days ago");
   });
 });

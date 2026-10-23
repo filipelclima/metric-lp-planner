@@ -6,7 +6,11 @@ import { normalizePool, parsePoolPage } from "../normalize";
 import { SUPPORTED_CHAINS, type Pool, type RawBinsResponse, type RawPoolPage } from "../types";
 import { DATA_PROVIDER, DATA_PROVIDER_ABI, LIQUIDITY_ADDED_TOPIC, LIQUIDITY_REMOVED_TOPIC, MULTICALL3 } from "./abi";
 import {
+  annualizedPnl,
   calibrateScale,
+  heldDaysSince,
+  userFeeApr,
+  type BinValue,
   decodeLiquidityLog,
   groupPositions,
   hodlValue,
@@ -175,8 +179,9 @@ function buildView(
       pnlAprBps: inSpan && a?.hasData ? a.pnlAprBps : null,
     };
   });
+  // Same 7d window for fees and APRs; age from the first deposit's block timestamp, to the second.
   const windowDays = data?.windowDays ?? 7;
-  const ageDays = firstTs !== null ? Math.max(0, (now - firstTs) / 86400) : null;
+  const ageDays = heldDaysSince(firstTs, now);
   const vb = valueBins(inputs, windowDays, ageDays);
   const valueUsd = vb.reduce((s, b) => s + b.valueUsd, 0);
   const feesUsd = vb.reduce((s, b) => s + b.feesUsd, 0);
@@ -206,8 +211,11 @@ function buildView(
     hodlUsd: hodl.usd,
     pnlUsd,
     pnlApprox: hodl.approx,
-    feeApr: weightedApr(vb, (b) => b.aprBps),
-    netApr: weightedApr(vb, (b) => b.pnlAprBps),
+    pnlAnnualized: annualizedPnl(pnlUsd, hodl.usd, ageDays),
+    yourFeeApr: userFeeApr(vb),
+    binsFeeApr: weightedApr(vb, (b) => b.aprBps),
+    binsNetApr: weightedApr(vb, (b) => b.pnlAprBps),
+    heldDays: ageDays,
     status,
     insights: insights({ bins: vb, curBinIdx, status, pnlUsd, pnlApprox: hodl.approx }),
     firstDepositTs: firstTs,
@@ -217,15 +225,26 @@ function buildView(
 }
 
 export function summarize(positions: PositionView[]): PortfolioSummary {
-  const all = positions.flatMap((p) => p.bins.map((b) => ({ ...b, valueUsd: b.valueUsd })));
-  const pnls = positions.map((p) => p.pnlUsd);
+  const all: BinValue[] = positions.flatMap((p) => p.bins);
+  const sum = (f: (p: PositionView) => number) => positions.reduce((s, p) => s + f(p), 0);
+  const withPnl = positions.filter((p) => p.pnlUsd !== null && p.hodlUsd !== null);
+  const pnlUsd = withPnl.length ? withPnl.reduce((s, p) => s + p.pnlUsd!, 0) : null;
+  const hodlUsd = withPnl.length ? withPnl.reduce((s, p) => s + p.hodlUsd!, 0) : null;
+  // HODL-weighted holding time across positions with a known age.
+  const aged = withPnl.filter((p) => p.heldDays !== null && p.hodlUsd! > 0);
+  const w = aged.reduce((s, p) => s + p.hodlUsd!, 0);
+  const heldDays = w > 0 ? aged.reduce((s, p) => s + p.hodlUsd! * p.heldDays!, 0) / w : null;
   return {
-    valueUsd: positions.reduce((s, p) => s + p.valueUsd, 0),
-    feesUsd: positions.reduce((s, p) => s + p.feesUsd, 0),
-    pnlUsd: pnls.some((x) => x !== null) ? pnls.reduce<number>((s, x) => s + (x ?? 0), 0) : null,
+    valueUsd: sum((p) => p.valueUsd),
+    feesUsd: sum((p) => p.feesUsd),
+    hodlUsd,
+    pnlUsd,
     pnlApprox: positions.some((p) => p.pnlApprox || p.pnlUsd === null),
-    feeApr: weightedApr(all, (b) => b.aprBps),
-    netApr: weightedApr(all, (b) => b.pnlAprBps),
+    pnlAnnualized: annualizedPnl(pnlUsd, hodlUsd, heldDays),
+    yourFeeApr: userFeeApr(all),
+    binsFeeApr: weightedApr(all, (b) => b.aprBps),
+    binsNetApr: weightedApr(all, (b) => b.pnlAprBps),
+    heldDays,
     count: positions.length,
   };
 }

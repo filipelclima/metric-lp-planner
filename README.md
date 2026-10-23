@@ -57,7 +57,11 @@ Paste any wallet to see its Metric LP positions. It's read-only: no wallet conne
   - They go through Multicall3. Any call it reports as failed, including all of them on a chain without Multicall3, is retried as plain `eth_call`s in JSON-RPC batches.
   - Chains run in parallel. If one chain fails, it's reported and the others still load.
 - **Value**: per bin, `positionBinShares / binTotalShares × (token0.reserveFiat + token1.reserveFiat)`, using `/analytics/bins?period=7d`.
-- **Est. fees (last 7d)**: `share × bin lpFeesFiat`, scaled by `min(1, age / window)`, where age runs from the block of the first deposit.
+- **Est. fees since deposit (from 7d rates)**: `Σ share_b × lpFeesFiat_b × min(1, age / window)`. Shares are read at the current block, the window is the same 7d one the APRs use, and age runs from the block timestamp of the first deposit (shown as "deposited 1.2 days ago").
+- **Your fee APR (at current share)**: `Σ share_b × lpFeesFiat_b / windowDays × 365 / value`. It's consistent with the fee estimate by construction (fees ≈ APR × value × days held / 365).
+  - The bins' own 7d APRs are shown separately as "Bins' 7d fee / net APR (pool)": pool history, not your result.
+  - Metric's `aprBps` divides by the bins' 7d *average* liquidity. When current reserves are well above that average (for example, your own recent deposit is a big part of thin bins), the bins' APR overstates what your position earns.
+- **Your result**: PnL vs HODL in $, plus annualized (`PnL / HODL value / days held × 365`, shown after 1 day).
 - **PnL vs HODL**: current value minus the worth of the net deposited tokens.
   - Net deposited = Σ|Δ| from `LiquidityAdded` − Σ|Δ| from `LiquidityRemoved`, per token, in "scaled" units.
   - **Scale, determined empirically at runtime**: `binState` balances use the same scaled units, and analytics gives the same bins' `reserveFiat`. So `reserveFiat / balanceScaled` is a USD rate per scaled unit, with no assumption about token decimals.

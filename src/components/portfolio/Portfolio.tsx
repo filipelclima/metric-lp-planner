@@ -11,7 +11,7 @@ import { CHAINS } from "@/lib/types";
 import { useApi } from "@/lib/useApi";
 import { ShareMenu, type ShareLinks } from "../ShareMenu";
 import { Card, CountUp, ErrorNote, InfoTip, Segmented, Skeleton, inputCls } from "../ui";
-import PositionCard, { signedUsd } from "./PositionCard";
+import PositionCard, { PoolStat, ResultRow } from "./PositionCard";
 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 /** Optional demo wallet, configured per deploy (never committed). */
@@ -169,13 +169,12 @@ function Results({ data, onRetry }: { data: PortfolioResponse; onRetry: () => vo
 
 function SummaryHero({ data }: { data: PortfolioResponse }) {
   const s = data.summary;
-  const pnlTone = s.pnlUsd === null ? "text-faint" : s.pnlUsd < 0 ? "text-bad" : "text-good";
   const build = (): ShareLinks => {
     const snap = freezePortfolioSnapshot({
       value: s.valueUsd,
       pnl: s.pnlUsd,
       pnlApprox: s.pnlApprox,
-      feeApr: s.feeApr === null ? null : s.feeApr * 100,
+      feeApr: s.yourFeeApr === null ? null : s.yourFeeApr * 100,
       count: s.count,
       date: today(),
     });
@@ -190,7 +189,7 @@ function SummaryHero({ data }: { data: PortfolioResponse }) {
     };
   };
   return (
-    <Card glow={s.netApr === null ? "none" : s.netApr >= 0 ? "good" : "bad"} className="p-5 sm:p-6">
+    <Card glow={s.pnlUsd === null ? "none" : s.pnlUsd >= 0 ? "good" : "bad"} className="p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
@@ -200,22 +199,35 @@ function SummaryHero({ data }: { data: PortfolioResponse }) {
         </div>
         <ShareMenu build={build} />
       </div>
-      <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <HeroStat label="Est. fees (last 7d)" tip="Your share of each bin's LP fees over the last 7 days, prorated for positions younger than that.">
+      <div className="mt-5 grid grid-cols-2 gap-4">
+        <HeroStat
+          label="Est. fees since deposit (from 7d rates)"
+          tip="Σ your share of each bin × its LP fees over the last 7d × min(1, time since that position's first deposit / 7d). Shares at the current block."
+        >
           <CountUp value={s.feesUsd} format={(v) => fmtUsd(v)} />
         </HeroStat>
-        <HeroStat
-          label={`PnL vs HODL${s.pnlApprox ? " (approx.)" : ""}`}
-          tip="Current value minus what the net deposited tokens would be worth today. Approximate when deposit units can't be calibrated against onchain bin balances."
-        >
-          {s.pnlUsd === null ? <span className="num text-faint">—</span> : <CountUp value={s.pnlUsd} format={signedUsd} className={pnlTone} />}
+        <HeroStat label="Your fee APR (at current share)" tip="Your share of each bin's 7d fee rate × 365 / your total value. Consistent with the fee estimate.">
+          <span className="num text-accent">{fmtApr(s.yourFeeApr)}</span>
         </HeroStat>
-        <HeroStat label="Fee APR" tip="Value-weighted 7d fee APR across all bins you hold.">
-          <span className="num text-accent">{fmtApr(s.feeApr)}</span>
-        </HeroStat>
-        <HeroStat label="Net APR (hist.)" tip="Value-weighted 7d net APR (fees + price moves) across all bins you hold. Volatile.">
-          <span className={`num ${s.netApr === null ? "text-faint" : s.netApr < 0 ? "text-bad" : "text-good"}`}>{fmtApr(s.netApr)}</span>
-        </HeroStat>
+      </div>
+      <ResultRow
+        pnlUsd={s.pnlUsd}
+        pnlApprox={s.pnlApprox}
+        annualized={s.pnlAnnualized}
+        tip="Current value minus what the net deposited tokens would be worth today; annualized over the (HODL-weighted) time held, shown after 1 day. Approximate when deposit units can't be calibrated against onchain bin balances."
+      />
+      <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-[12px] text-faint">
+        <PoolStat
+          label="Bins' 7d fee APR (pool)"
+          value={s.binsFeeApr}
+          tip="Metric's 7d fee APR of the bins you hold, weighted by your value. Pool history, not your result."
+        />
+        <PoolStat
+          label="Bins' 7d net APR (pool)"
+          value={s.binsNetApr}
+          signed
+          tip="Metric's 7d trading-PnL APR (fees + price moves) of the bins you hold, weighted by your value. Pool history, not your result."
+        />
       </div>
     </Card>
   );

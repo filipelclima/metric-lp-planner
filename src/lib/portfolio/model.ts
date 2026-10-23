@@ -125,14 +125,18 @@ export interface BinValue {
   idx: number;
   share: number;
   valueUsd: number;
+  /** Est. fees since deposit: share × window fees × min(1, age / window). */
   feesUsd: number;
+  /** Fee rate at the current share: share × window fees / window days. */
+  dailyFeesUsd: number;
   aprBps: number | null;
   pnlAprBps: number | null;
 }
 
 /**
- * Bin value = share × (reserve0Fiat + reserve1Fiat). Fees = share × lpFeesFiat over the window,
- * scaled down when the position is younger than the window (time since its first deposit).
+ * Bin value = share × (reserve0Fiat + reserve1Fiat), share = userShares / totalShares at the current block.
+ * Est. fees since deposit = share × lpFeesFiat over the window × min(1, age / window): the window's fee rate
+ * applied to the time the position has existed (same 7d window as the APRs).
  */
 export function valueBins(bins: BinInput[], windowDays: number, positionAgeDays: number | null): BinValue[] {
   const ageFactor = windowDays > 0 && positionAgeDays !== null ? Math.max(0, Math.min(1, positionAgeDays / windowDays)) : 1;
@@ -143,6 +147,7 @@ export function valueBins(bins: BinInput[], windowDays: number, positionAgeDays:
       share,
       valueUsd: share * (b.reserve0Fiat + b.reserve1Fiat),
       feesUsd: share * b.lpFeesFiat * ageFactor,
+      dailyFeesUsd: windowDays > 0 ? (share * b.lpFeesFiat) / windowDays : 0,
       aprBps: b.aprBps,
       pnlAprBps: b.pnlAprBps,
     };
@@ -248,6 +253,40 @@ export function weightedApr(bins: BinValue[], pick: (b: BinValue) => number | nu
     s += b.valueUsd * (v / 1e4);
   }
   return w > 0 ? s / w : null;
+}
+
+/**
+ * Your fee APR at the current share: Σ share × daily fees × 365 / value. Consistent with the fee estimate
+ * by construction (fees ≈ APR × value × days / 365 while days ≤ window). The bins' own aprBps divides by
+ * their 7d *average* liquidity instead, so it overstates your rate when the bins' liquidity grew recently —
+ * e.g. when your own deposit is a large part of thin bins.
+ */
+export function userFeeApr(bins: BinValue[]): number | null {
+  const value = bins.reduce((s, b) => s + b.valueUsd, 0);
+  if (value <= 0) return null;
+  return (bins.reduce((s, b) => s + b.dailyFeesUsd, 0) * 365) / value;
+}
+
+/** Days since the first deposit (seconds-precise); null if unknown. */
+export function heldDaysSince(firstTs: number | null, nowSec: number): number | null {
+  return firstTs === null ? null : Math.max(0, (nowSec - firstTs) / 86400);
+}
+
+/** Annualized PnL vs HODL: pnl / hodl / heldDays × 365. Null when held < 1 day (too noisy) or inputs missing. */
+export function annualizedPnl(pnlUsd: number | null, hodlUsd: number | null, heldDays: number | null): number | null {
+  if (pnlUsd === null || hodlUsd === null || hodlUsd <= 0 || heldDays === null || heldDays < 1) return null;
+  return (pnlUsd / hodlUsd / heldDays) * 365;
+}
+
+/** Plain-English deposit age, e.g. "deposited 1.2 days ago", "deposited 5 hours ago". */
+export function depositAgeText(heldDays: number | null): string | null {
+  if (heldDays === null) return null;
+  if (heldDays < 1) {
+    const h = Math.max(1, Math.round(heldDays * 24));
+    return `deposited ${h} hour${h === 1 ? "" : "s"} ago`;
+  }
+  const d = heldDays < 10 ? heldDays.toFixed(1) : String(Math.round(heldDays));
+  return `deposited ${d} day${d === "1.0" ? "" : "s"} ago`;
 }
 
 // ---------- insights ----------

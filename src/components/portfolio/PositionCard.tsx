@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { fmtApr, fmtBinPct, fmtUsd, tickStep } from "@/lib/calc";
-import { STATUS_LABEL, metricPoolUrl, replanUrl, type RangeStatus } from "@/lib/portfolio/model";
+import { STATUS_LABEL, depositAgeText, metricPoolUrl, replanUrl, type RangeStatus } from "@/lib/portfolio/model";
 import type { PositionBinView, PositionView } from "@/lib/portfolio/types";
 import { Card, ChainBadge, InfoTip, TierBadge, TokenLogo } from "../ui";
 
@@ -19,7 +19,9 @@ export const signedUsd = (v: number) => `${v < 0 ? "−" : "+"}${fmtUsd(Math.abs
 
 export default function PositionCard({ p }: { p: PositionView }) {
   const held = p.bins.filter((b) => b.share > 0).length;
-  const glow = p.netApr === null ? "none" : p.netApr >= 0 ? "good" : "bad";
+  // Glow follows the user's own result, not the pool's history.
+  const glow = p.pnlUsd === null ? "none" : p.pnlUsd >= 0 ? "good" : "bad";
+  const age = depositAgeText(p.heldDays);
   return (
     <Card glow={glow} className="p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -35,27 +37,42 @@ export default function PositionCard({ p }: { p: PositionView }) {
           </div>
           <div className="num mt-1 text-[13px] text-muted">
             {p.range ? `#${p.range.from} → #${p.range.to} (${held} bin${held === 1 ? "" : "s"})` : "no bins held"} · active #{p.curBinIdx}
+            {age && <span className="font-sans">{` · ${age}`}</span>}
           </div>
         </div>
         <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLE[p.status]}`}>{STATUS_LABEL[p.status]}</span>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-5">
+      <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Stat label="Value" value={fmtUsd(p.valueUsd)} big />
-        <Stat label="Est. fees (last 7d)" value={fmtUsd(p.feesUsd)} tip="Your share of each bin's LP fees over the 7d window, prorated if the position is younger than that." />
         <Stat
-          label="PnL vs HODL"
-          value={p.pnlUsd === null ? "—" : signedUsd(p.pnlUsd)}
-          tone={p.pnlUsd === null ? "text-faint" : p.pnlUsd < 0 ? "text-bad" : "text-good"}
-          badge={p.pnlApprox ? "approx." : undefined}
-          tip={scaleTip(p)}
+          label="Est. fees since deposit"
+          sub="from 7d rates"
+          value={fmtUsd(p.feesUsd)}
+          tip="Σ your share of each bin × that bin's LP fees over the last 7d × min(1, time since your first deposit / 7d). Shares are read at the current block."
         />
-        <Stat label="Fee APR" value={fmtApr(p.feeApr)} tone="text-accent" tip="Value-weighted 7d fee APR of the bins you hold." />
         <Stat
-          label="Net APR"
-          value={fmtApr(p.netApr)}
-          tone={p.netApr === null ? "text-faint" : p.netApr < 0 ? "text-bad" : "text-good"}
-          tip="Value-weighted 7d net APR (trading PnL: fees + price moves) of the bins you hold. Historical and volatile."
+          label="Your fee APR"
+          sub="at current share"
+          value={fmtApr(p.yourFeeApr)}
+          tone="text-accent"
+          tip="Your share of each bin's 7d fee rate × 365 / your value. Consistent with the fee estimate: fees ≈ APR × value × days held / 365."
+        />
+      </div>
+
+      <ResultRow pnlUsd={p.pnlUsd} pnlApprox={p.pnlApprox} annualized={p.pnlAnnualized} tip={scaleTip(p)} />
+
+      <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-[12px] text-faint">
+        <PoolStat
+          label="Bins' 7d fee APR (pool)"
+          value={p.binsFeeApr}
+          tip="Metric's own 7d fee APR for the bins you hold (fees ÷ the bins' 7d average liquidity), weighted by your value. Pool history, not your result. Higher than your fee APR when the bins' liquidity grew recently, e.g. from your own deposit."
+        />
+        <PoolStat
+          label="Bins' 7d net APR (pool)"
+          value={p.binsNetApr}
+          signed
+          tip="Metric's 7d trading-PnL APR (fees + price moves) for the bins you hold, weighted by your value. Pool history, not your result: see “Your result” for your PnL vs HODL."
         />
       </div>
 
@@ -99,11 +116,30 @@ function scaleTip(p: PositionView): string {
   }.`;
 }
 
-function Stat({ label, value, tone = "text-text", big, tip, badge }: { label: string; value: string; tone?: string; big?: boolean; tip?: string; badge?: string }) {
+function Stat({
+  label,
+  sub,
+  value,
+  tone = "text-text",
+  big,
+  tip,
+  badge,
+}: {
+  label: string;
+  sub?: string;
+  value: string;
+  tone?: string;
+  big?: boolean;
+  tip?: string;
+  badge?: string;
+}) {
   return (
     <div className="min-w-0">
-      <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
-        <span className="truncate">{label}</span>
+      <div className="flex items-start gap-1.5 text-[10px] font-medium uppercase leading-snug tracking-[0.08em] text-faint">
+        <span>
+          {label}
+          {sub && <span className="ml-1 normal-case tracking-normal">({sub})</span>}
+        </span>
         {tip && <InfoTip>{tip}</InfoTip>}
       </div>
       <div className={`num mt-1 truncate ${big ? "text-2xl font-semibold" : "text-lg"} ${tone}`}>
@@ -111,6 +147,39 @@ function Stat({ label, value, tone = "text-text", big, tip, badge }: { label: st
         {badge && <span className="ml-1.5 align-middle font-sans text-[10px] text-faint">{badge}</span>}
       </div>
     </div>
+  );
+}
+
+/** "Your result": PnL vs HODL in $ and annualized — the user's outcome, as opposed to the pool's history. */
+export function ResultRow({ pnlUsd, pnlApprox, annualized, tip }: { pnlUsd: number | null; pnlApprox: boolean; annualized: number | null; tip: string }) {
+  const tone = pnlUsd === null ? "text-faint" : pnlUsd < 0 ? "text-bad" : "text-good";
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl bg-surface-2/70 px-4 py-3">
+      <span className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
+        Your result
+        <InfoTip>{tip}</InfoTip>
+      </span>
+      <span className="flex items-baseline gap-2">
+        <span className="text-[12px] text-muted">PnL vs HODL</span>
+        <span className={`num text-lg ${tone}`}>{pnlUsd === null ? "—" : signedUsd(pnlUsd)}</span>
+        {pnlApprox && pnlUsd !== null && <span className="text-[10px] text-faint">approx.</span>}
+      </span>
+      <span className="flex items-baseline gap-2" title={annualized === null ? "Shown after 1 day held" : undefined}>
+        <span className="text-[12px] text-muted">annualized</span>
+        <span className={`num text-lg ${annualized === null ? "text-faint" : annualized < 0 ? "text-bad" : "text-good"}`}>{fmtApr(annualized)}</span>
+      </span>
+    </div>
+  );
+}
+
+export function PoolStat({ label, value, tip, signed }: { label: string; value: number | null; tip: string; signed?: boolean }) {
+  const tone = value === null ? "" : signed ? (value < 0 ? "text-bad/80" : "text-good/80") : "text-muted";
+  return (
+    <span className="flex items-center gap-1.5">
+      {label}
+      <span className={`num ${tone}`}>{fmtApr(value)}</span>
+      <InfoTip>{tip}</InfoTip>
+    </span>
   );
 }
 
