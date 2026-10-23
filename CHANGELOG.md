@@ -4,7 +4,7 @@ One entry per task, newest first. Each entry lists what changed, what couldn't b
 
 ## Entries
 
-### 2026-10-23 · `this commit` · Changelog and CLAUDE.md
+### 2026-10-23 · `a919b6c` · Changelog and CLAUDE.md
 - **Changed:** Added `CHANGELOG.md`, with a backfill of earlier work below, and `CLAUDE.md` with the rule to append an entry after every task and push it with the code.
 - **Couldn't test:** Nothing (docs only).
 - **Review:** Workflow is two commits per task (code, then a changelog entry citing the code commit's hash), pushed together. The backfilled entries were reconstructed from the commit history and session notes.
