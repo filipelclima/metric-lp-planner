@@ -4,6 +4,22 @@ One entry per task, newest first. Each entry lists what changed, what couldn't b
 
 ## Entries
 
+### 2026-10-23 · `6e97b77` · Top pools page
+- **Changed:**
+  - `/pools` ranks pools by net APR (7d), with sortable columns, fee and net bars, price drag and vol/TVL.
+  - Filters: chain, tier, min TVL $25k, verified only, show all.
+  - Three highlight cards, and Plan / Open on Metric links.
+  - "Copy weekly top 5" post, plus a top-5 share card built from validated snapshot params.
+  - `/api/pools-ranking`, cached 300s.
+  - Header nav: Planner · Top pools · Portfolio.
+- **Couldn't test:** Live data (`api.metric.xyz` is blocked in the sandbox). Verified with unit tests and a local mock of 14 synthetic pools, plus desktop and mobile screenshots.
+- **Review:**
+  - "Show all" also hides private (deposit-whitelisted) pools by default; not in the spec.
+  - "Most efficient" ignores pools with zero 24h volume.
+  - The fee/net bars are scaled to the 90th percentile, so outliers cap at full width.
+  - On mobile, "Docs ↗" is hidden from the header.
+  - The weekly post uses the visitor's host (e.g. `metric-lp-planner.vercel.app/pools`).
+
 ### 2026-10-23 · `73d4ee8` · Revert: 24h rates for young positions
 - **Changed:**
   - Reverted `bfccd0a`. Fee and net estimates always use 7d bin rates again, with the "(from 7d rates)" labels and the single 7d analytics fetch.
