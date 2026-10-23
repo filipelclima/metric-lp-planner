@@ -4,6 +4,15 @@ One entry per task, newest first. Each entry lists what changed, what couldn't b
 
 ## Entries
 
+### 2026-10-23 · `234728d` · Bin edges vs midpoints
+- **Changed:**
+  - Bin input hints now name the edge: Start "#-2 · from -0.08%" (the start bin's lower edge) and End "#1 · to +0.08%" (the end bin's upper edge).
+  - Under the Bin Plan line: "Range covers -0.08% to +0.08% around the oracle price (bin labels show each bin's midpoint, as in app.metric.xyz)."
+  - Applies to the Compare editors too, since they share the input.
+  - The edge-label test was updated, and the note is tested.
+- **Couldn't test:** Live data (Metric is blocked in the sandbox). Verified on the local mock: #-2 → #1 shows "from -0.02%", "to +0.02%", midpoints ±0.015%, and the note.
+- **Review:** Nothing
+
 ### 2026-10-23 · `8917d5a` · Range UX: preset coverage, Wider, bin inputs, token USD
 - **Changed:**
   - Preset buttons show their range and real coverage (e.g. "#-2…#0 / 96%"). When 80/90/95% give the same range, a note says "This pool is concentrated: 3 bins hold 96% of volume, so these presets match."
