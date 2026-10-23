@@ -4,6 +4,26 @@ One entry per task, newest first. Each entry lists what changed, what couldn't b
 
 ## Entries
 
+### 2026-10-23 · `1d96b0a` · Pools with no trading
+- **Changed:**
+  - **Empty state.** When the selected window has 0 volume, the hero numbers are replaced by "No trades in the last 7d: this pool earned no fees, so there's nothing to estimate."
+    - "Use 30d data" etc. buttons appear only for longer periods that do have volume; they're fetched to check.
+    - "Pick another pool" opens the picker (the sidebar on desktop, the bottom sheet on mobile).
+  - **Presets without volume.** No coverage labels and no concentrated-pool note (fixes "11 bins hold no volume of volume…"). Shows "Presets need trading volume" instead.
+  - **Picker.** Inactive pools (no 7d volume and TVL < $10k) are hidden behind "Show inactive pools" (`pinactive=1`). Shows "Showing X of Y pools" with a "show all" link. Search combines with all filters.
+  - New `src/lib/noTrades.ts`. 8 new tests (144 total).
+- **Couldn't test:** Live TEST/WETH (Metric is blocked in the sandbox). Verified against a mock pool with 0 volume in 24h/7d and some in 30d:
+  - 7d offers "Use 30d data", which switches to normal results;
+  - 24h offers only 30d;
+  - "Pick another pool" opens the picker on desktop and mobile;
+  - the presets note shows.
+- **Review:**
+  - `/metadata` has no 7d volume, so "no 7d volume" is approximated as a 7d fee APR of 0 or missing, plus no 24h volume.
+  - With the default ≥$10k TVL filter, inactive pools are already hidden; the toggle only matters with TVL = Any.
+  - The histogram and bin details still show below the empty state (liquidity is still informative).
+  - Compare doesn't get the hero empty state; a no-trade scenario just shows 0% fee APR.
+  - "Show all" turns on both TVL = Any and inactive pools.
+
 ### 2026-10-23 · `6245d01` · Pool picker: sorting, APR period, TVL filter
 - **Changed:**
   - Pair, Chain, TVL and APR headers sort. Clicking again flips the direction, and ▲/▼ shows it. A new column starts high → low for numbers and A → Z for text.
