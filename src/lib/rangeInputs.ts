@@ -37,10 +37,18 @@ export function clampBin(v: number, b: BinBounds | null): { value: number; clamp
   return { value: v, clamped: null };
 }
 
-/** "#-2 = -0.06%": the lower edge of the start bin, or the upper edge of the end bin. */
+/**
+ * Input hint with the range's outer edge: "#-2 · from -0.08%" (lower edge of the start bin) or
+ * "#1 · to +0.08%" (upper edge of the end bin). Bin labels elsewhere show midpoints, hence "from"/"to".
+ */
 export function edgeLabel(data: BinData, idx: number, side: "start" | "end"): string {
   const b = getBin(data, idx);
-  return `#${idx} = ${fmtPlanPct(side === "start" ? b.lowPct : b.highPct)}`;
+  return side === "start" ? `#${idx} · from ${fmtPlanPct(b.lowPct)}` : `#${idx} · to ${fmtPlanPct(b.highPct)}`;
+}
+
+/** Note under the Bin Plan line, reconciling its midpoint labels with the inputs' edges. */
+export function rangeEdgesNote(data: BinData, from: number, to: number): string {
+  return `Range covers ${fmtPlanPct(getBin(data, from).lowPct)} to ${fmtPlanPct(getBin(data, to).highPct)} around the oracle price (bin labels show each bin's midpoint, as in app.metric.xyz).`;
 }
 
 // ---------- presets ----------

@@ -18,7 +18,7 @@ import {
   type Estimate,
 } from "@/lib/calc";
 import { NET_NOTE } from "@/lib/plan";
-import { tokenNeeds } from "@/lib/rangeInputs";
+import { rangeEdgesNote, tokenNeeds } from "@/lib/rangeInputs";
 import type { Period, Pool } from "@/lib/types";
 import type { PlannerModel } from "@/lib/usePlanner";
 import { flashCls, useFlash } from "./RangeControls";
@@ -455,6 +455,7 @@ function BinPlanStrip({ pool, data, from, to, estimate }: { pool: Pool; data: Bi
             </AnimatePresence>
           </button>
         </div>
+        <p className="mt-2 text-[11px] leading-snug text-faint">{rangeEdgesNote(data, from, to)}</p>
       </div>
       <div className="lg:text-right">
         <SectionLabel>You&apos;ll need</SectionLabel>

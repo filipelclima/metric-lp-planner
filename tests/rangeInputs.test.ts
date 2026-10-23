@@ -6,6 +6,7 @@ import {
   clampBin,
   concentrationNote,
   edgeLabel,
+  rangeEdgesNote,
   parseBinInput,
   presetOptions,
   presetSubLabel,
@@ -62,9 +63,12 @@ describe("bin input parsing", () => {
     expect(clampBin(99, null)).toEqual({ value: 99, clamped: null }); // no data yet: nothing to clamp to
   });
 
-  it("edge labels: start = lower edge, end = upper edge", () => {
-    expect(edgeLabel(spread, -2, "start")).toBe("#-2 = -0.02%");
-    expect(edgeLabel(spread, 0, "end")).toBe("#0 = +0.01%");
+  it("edge labels: start = lower edge, end = upper edge, labeled from/to", () => {
+    expect(edgeLabel(spread, -2, "start")).toBe("#-2 · from -0.02%");
+    expect(edgeLabel(spread, 1, "end")).toBe("#1 · to +0.02%");
+    expect(rangeEdgesNote(spread, -2, 1)).toBe(
+      "Range covers -0.02% to +0.02% around the oracle price (bin labels show each bin's midpoint, as in app.metric.xyz).",
+    );
   });
 });
 
