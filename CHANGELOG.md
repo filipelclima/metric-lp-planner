@@ -4,6 +4,20 @@ One entry per task, newest first. Each entry lists what changed, what couldn't b
 
 ## Entries
 
+### 2026-10-23 · `fbfc233` · Compare: distinct ranges in concentrated pools
+- **Changed:**
+  - A 90/95% preset that isn't strictly wider than the previous smaller preset (same pool) becomes that range widened by 1 bin (90%) or 2 bins (95%) on each side. Defaults are therefore A = 80%, B = A ± 1, C = B ± 2, unless the real presets are already wider.
+  - A preset still equal to an earlier range widens 1 bin per side until distinct. It's labeled e.g. "Wide (+2 bins each side)" with an info tip naming the scenario it was widened from.
+  - Manual ranges are never moved. An exact duplicate (same pool) shows a "Same range as B" note, and its verdict is replaced by that note; it's left out of the verdict comparison.
+  - Table columns are equal width.
+  - New `resolveRanges`, `scenarioTitle` and `verdictsWithDuplicates` in `compare.ts`, with 7 tests, including the concentrated fixture where the 90% and 95% presets coincide. 118 tests passing.
+- **Couldn't test:** The live SKHYB/USDT pool (Metric is blocked in the sandbox). Verified with unit tests and, against the local mock, a manual duplicate and a preset colliding with a manual range (desktop and mobile screenshots).
+- **Review:**
+  - The 95% step is 2 bins from whichever smaller preset comes before it, even if that's 80% (no 90% scenario).
+  - The 80% preset is widened only when it collides with an earlier range.
+  - The duplicate column still takes part in best-per-row highlights, so ties show on both A and B.
+  - Widening ignores the pool's bin bounds; bins outside the data count as empty.
+
 ### 2026-10-23 · `ebe5f2e` · Compare ranges
 - **Changed:**
   - `/compare`: up to 3 scenarios (A/B/C, defaults Narrow 80%, Medium 90%, Wide 95%) with editable bins, distribution and an optional different pool (same deposit). Linked from the planner hero.
