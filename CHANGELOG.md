@@ -4,6 +4,26 @@ One entry per task, newest first. Each entry lists what changed, what couldn't b
 
 ## Entries
 
+### 2026-10-23 · `6725bec` · "No trades" warnings everywhere
+- **Changed:**
+  - Shared badge rule in `src/lib/activity.ts`: 24h volume 0 (or missing) → "No trades"; if the 7d fee APR is 0 or missing too → "No trades 7d".
+  - **Compare:** a scenario whose pool had 0 volume in the data period shows a warning card instead of numbers: "⚠ No trades in the last 7d: no fees to estimate".
+    - "Use 30d data" appears only if that pool's 30d data has volume. "Change pool" opens that scenario's picker, or the main pool's.
+    - The column is left out of best-value highlights, verdicts, the fee/net chart, and the share link and card.
+  - **Pool picker** (planner and Compare): amber badge on matching rows.
+  - **Top pools:** same badge. The three highlight cards skip these pools.
+  - **Portfolio:** the pill "No trades: earning nothing" in amber, and a first insight explaining it. The per-bin "idle" lines and the all-good line are suppressed for those positions.
+  - 11 new tests (155 total). The existing highlights test now expects its zero-volume pool to be excluded from "best net"; that behaviour change was requested.
+- **Couldn't test:** Live data (Metric is blocked in the sandbox). Verified with Playwright against a mock where one pool has no 24h/7d trades but some over 30d:
+  - the Compare warning column, "Use 30d data" and "Change pool";
+  - picker and Top pools badges;
+  - Portfolio pill and insight.
+- **Review:**
+  - A pool with no `analytics24h` at all counts as "No trades". The mock's planner pools have none and got badges; check that real `/metadata?include24h=true` always includes it for active pools.
+  - The badge uses 24h volume, while the planner and Compare warnings use the selected data period, so they can disagree (e.g. no trades today, but trades over 7d).
+  - In Compare, "Use 30d data" switches the period for all scenarios, since the period is shared.
+  - The warning column still draws its range on the histogram when it's on the main pool.
+
 ### 2026-10-23 · `1d96b0a` · Pools with no trading
 - **Changed:**
   - **Empty state.** When the selected window has 0 volume, the hero numbers are replaced by "No trades in the last 7d: this pool earned no fees, so there's nothing to estimate."
