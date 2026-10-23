@@ -1,7 +1,8 @@
 import "server-only";
 import { NextResponse } from "next/server";
 
-export const METRIC_API = "https://api.metric.xyz/public/v1";
+/** Overridable for local testing against a mock; defaults to the public API. */
+export const METRIC_API = process.env.METRIC_API_BASE ?? "https://api.metric.xyz/public/v1";
 
 export type UpstreamResult =
   | { ok: true; body: unknown }

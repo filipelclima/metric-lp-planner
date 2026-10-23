@@ -44,6 +44,37 @@ Think *Poolfish (uniswap.fish) for Metric*.
 - Motion: count-up numbers, staggered hero entrance, growing bars and an animated range overlay (framer-motion). All of it is disabled under `prefers-reduced-motion`.
 - Shareable URL, e.g. `?chain=56&pool=0x..&amount=1000&days=30&from=-8&to=7&strategy=uniform&period=7d`. A `preset=80|90|95` parameter keeps an auto preset live.
 
+## Portfolio (`/portfolio?wallet=0x…`)
+
+Paste any wallet to see its Metric LP positions. It's read-only: no wallet connection, no signatures, and only public onchain data plus Metric's public API.
+
+- **Discovery**: `eth_getLogs` on `https://rpc.metric.xyz/{chainId}` from block 0.
+  - No address filter. Topics: `[[LiquidityAdded, LiquidityRemoved], wallet]`.
+  - Logs from pools that aren't in `/evm/metadata?minTvlFiat=0` are dropped.
+  - A position is `(pool, salt)`, covering every bin it ever touched.
+- **Current state**: read through the Data Provider `0x83d66c5934b1525ee82e6e772c76c7acc778bbb7`.
+  - Calls: `positionBinShares`, `binTotalShares` and `binState`.
+  - They go through Multicall3. Any call it reports as failed, including all of them on a chain without Multicall3, is retried as plain `eth_call`s in JSON-RPC batches.
+  - Chains run in parallel. If one chain fails, it's reported and the others still load.
+- **Value**: per bin, `positionBinShares / binTotalShares × (token0.reserveFiat + token1.reserveFiat)`, using `/analytics/bins?period=7d`.
+- **Est. fees (last 7d)**: `share × bin lpFeesFiat`, scaled by `min(1, age / window)`, where age runs from the block of the first deposit.
+- **PnL vs HODL**: current value minus the worth of the net deposited tokens.
+  - Net deposited = Σ|Δ| from `LiquidityAdded` − Σ|Δ| from `LiquidityRemoved`, per token, in "scaled" units.
+  - **Scale, determined empirically at runtime**: `binState` balances use the same scaled units, and analytics gives the same bins' `reserveFiat`. So `reserveFiat / balanceScaled` is a USD rate per scaled unit, with no assumption about token decimals.
+  - The median rate across your bins is used. It counts as calibrated when all bins agree within 2%, and the implied exponent (`scaled = amount × 10^exp`) is reported.
+  - If a token has no balance in any of your bins, or the rates disagree, scaled amounts are assumed to be 18-decimal fixed point and the PnL is labelled **approx.**
+- **Status**: In range, Edge of range (active bin at the lowest or highest bin you hold), or Out of range — earning nothing.
+- **Insights**: out of range, edge of range, idle bins (< 2% fee APR over 7d), net APR below −50% in a bin, and holding would have been worth more. "Curator fee changed since deposit" isn't shown, because the public reads don't expose historical fee settings.
+- **Share card**: `/api/og?pv=…&pp=…&pa=…&pc=…&sd=…` shows totals only. The wallet is never part of the image URL.
+- `/api/positions?wallet=&chain=` is cached for 30s (`s-maxage=30`).
+
+Environment variables (all optional):
+
+| Var | Purpose |
+| --- | --- |
+| `NEXT_PUBLIC_EXAMPLE_WALLET` | Wallet behind the "Try an example" button. The button is hidden when unset. Keep it out of the repo. |
+| `METRIC_API_BASE`, `METRIC_RPC_BASE` | Point the server at a local mock instead of `api.metric.xyz` / `rpc.metric.xyz` (testing only). |
+
 ## Setup
 
 ```bash
@@ -112,5 +143,6 @@ src/lib/urlState.ts    shareable URL state
 src/lib/plan.ts        URL state + API data → range and estimate (shared by the page and /api/og)
 src/lib/usePlanner.ts  client hook: URL sync, data fetching, derived estimate
 src/app/api/**         proxy route handlers + /api/og share image
-src/components/**      UI (Planner, ConfigPanel, Hero, Histogram, BinDetails, Risk, ShareMenu, PoolPicker)
+src/lib/portfolio/     portfolio: ABIs, pure model (decoding, positions, value, HODL, status, insights), server loader
+src/components/**      UI (Planner, ConfigPanel, Hero, Histogram, BinDetails, Risk, ShareMenu, PoolPicker, portfolio/*)
 ```

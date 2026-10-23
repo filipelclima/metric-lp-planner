@@ -5,13 +5,15 @@ import { formatSnapshot, freezeSnapshot, makeShareId, ogImageQuery, shareText, s
 import type { PlannerModel } from "@/lib/usePlanner";
 import { Popover } from "./ui";
 
-interface ShareLinks {
+export interface ShareLinks {
   /** Page link with the frozen numbers and a unique share id. */
   link: string;
   /** Canonical og:image URL — the same one the shared page's metadata points to. */
   image: string;
   text: string;
-  snap: Snapshot | null;
+  /** "as of" date label when the link carries a snapshot. */
+  asOf: string | null;
+  fileName: string;
 }
 
 /** Freezes what the user sees right now into a unique, self-describing share link. */
@@ -33,15 +35,21 @@ function buildShare(m: PlannerModel): ShareLinks {
   const link = `${origin}/?${m.qs}${snap ? `&${snapshotParams(snap)}` : ""}&s=${makeShareId()}`;
   const image = `${origin}/api/og?${ogImageQuery(m.s, m.range, snap)}`;
   const text = snap ? shareText(snap, m.s.days) : `My LP plan for ${m.pool?.pair ?? "a Metric pool"} on Binwise`;
-  return { link, image, text, snap };
+  const fileName = `binwise-${(m.pool?.pair ?? "plan").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.png`;
+  return { link, image, text, asOf: snap ? formatSnapshot(snap).asOf : null, fileName };
+}
+
+/** Planner share menu. */
+export default function PlannerShareMenu({ m }: { m: PlannerModel }) {
+  return <ShareMenu build={() => buildShare(m)} />;
 }
 
 /**
- * "Share result": each open freezes the current numbers into a new link (unique `s` id so X never
- * reuses an old card), pre-warms the og image at the edge, and offers copy / download / post on X.
- * The card, preview and tweet text all come from the same snapshot, so they always match.
+ * "Share result": each open calls `build` to freeze the current numbers into a new link (unique `s`
+ * id so X never reuses an old card), pre-warms the og image at the edge, and offers copy / download /
+ * post on X. The card, preview and tweet text all come from the same snapshot, so they always match.
  */
-export default function ShareMenu({ m }: { m: PlannerModel }) {
+export function ShareMenu({ build }: { build: () => ShareLinks }) {
   const [share, setShare] = useState<ShareLinks | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const flash = (msg: string) => {
@@ -50,7 +58,7 @@ export default function ShareMenu({ m }: { m: PlannerModel }) {
   };
 
   const open = () => {
-    const s = buildShare(m);
+    const s = build();
     setShare(s);
     setStatus(null);
     // Pre-warm: render + cache the card at Vercel's edge before X asks for it.
@@ -76,7 +84,7 @@ export default function ShareMenu({ m }: { m: PlannerModel }) {
       const blob = await res.blob();
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = `binwise-${(m.pool?.pair ?? "plan").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.png`;
+      a.download = share.fileName;
       a.click();
       URL.revokeObjectURL(a.href);
       flash("Downloaded ✓");
@@ -99,7 +107,7 @@ export default function ShareMenu({ m }: { m: PlannerModel }) {
           // eslint-disable-next-line @next/next/no-img-element
           <img src={share.image} alt="Share card preview" className="mb-1 aspect-[1200/630] w-full rounded-lg bg-surface-2 object-cover" />
         )}
-        {share?.snap && <p className="px-3 pb-1 text-[11px] text-faint">Snapshot of these numbers as of {formatSnapshot(share.snap).asOf}</p>}
+        {share?.asOf && <p className="px-3 pb-1 text-[11px] text-faint">Snapshot of these numbers as of {share.asOf}</p>}
         <button className={item} onClick={copyLink}>
           Copy link <span className="text-faint">⌘C</span>
         </button>

@@ -3,6 +3,7 @@ import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import Link from "next/link";
 import { Logo } from "@/components/Logo";
+import Nav from "@/components/Nav";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -20,9 +21,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <span className="text-[15px] font-semibold tracking-tight">Binwise</span>
             <span className="hidden text-sm text-faint sm:inline">LP planner for Metric pools</span>
           </Link>
-          <a href="https://docs.metric.xyz" target="_blank" rel="noreferrer" className="text-sm text-muted transition hover:text-text">
-            Docs ↗
-          </a>
+          <Nav />
         </header>
         <main className="mx-auto max-w-[1400px] px-4 pb-24 sm:px-6 lg:pb-10">{children}</main>
         <footer className="border-t border-line/60">

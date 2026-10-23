@@ -1,0 +1,22 @@
+{
+  "_note": "Synthetic data only (no real wallets or pools). One position over bins -2..1; price at bin -1.",
+  "windowDays": 7,
+  "positionAgeDays": 3.5,
+  "curBinIdx": -1,
+  "price0": 2.5,
+  "price1": 1,
+  "bins": [
+    { "idx": -2, "userShares": "250000000000000000000", "totalShares": "1000000000000000000000", "balance0Scaled": "0", "balance1Scaled": "4000000000000000000000", "reserve0Fiat": 0, "reserve1Fiat": 4000, "lpFeesFiat": 70, "aprBps": 9125, "pnlAprBps": -51000 },
+    { "idx": -1, "userShares": "100000000000000000000", "totalShares": "1000000000000000000000", "balance0Scaled": "800000000000000000000", "balance1Scaled": "3000000000000000000000", "reserve0Fiat": 2000, "reserve1Fiat": 3000, "lpFeesFiat": 140, "aprBps": 14600, "pnlAprBps": 9000 },
+    { "idx": 0, "userShares": "500000000000000000000", "totalShares": "2000000000000000000000", "balance0Scaled": "400000000000000000000", "balance1Scaled": "0", "reserve0Fiat": 1000, "reserve1Fiat": 0, "lpFeesFiat": 0.1, "aprBps": 52, "pnlAprBps": 40 },
+    { "idx": 1, "userShares": "0", "totalShares": "500000000000000000000", "balance0Scaled": "200000000000000000000", "balance1Scaled": "0", "reserve0Fiat": 500, "reserve1Fiat": 0, "lpFeesFiat": 0, "aprBps": 0, "pnlAprBps": null }
+  ],
+  "expected": {
+    "valueUsd": 1750,
+    "feesUsd": 15.7625,
+    "usdPerScaled0": 2.5e-18,
+    "usdPerScaled1": 1e-18,
+    "impliedExp0": 18,
+    "impliedExp1": 18
+  }
+}

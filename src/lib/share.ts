@@ -164,3 +164,87 @@ export function freezeSnapshot(raw: Snapshot, now = Date.now()): Snapshot | null
   }
   return null;
 }
+
+// ---------- portfolio snapshots ----------
+
+/**
+ * Portfolio share snapshot. Never contains the wallet address: the card shows totals only.
+ *   pv total value USD · pp PnL vs HODL USD (optional) · px "1" if PnL is approximate
+ *   pa value-weighted fee APR % (optional) · pc number of positions · sd date
+ */
+export interface PortfolioSnapshot {
+  value: number;
+  pnl: number | null;
+  pnlApprox: boolean;
+  feeApr: number | null;
+  count: number;
+  date: string;
+}
+
+export const PORTFOLIO_SNAPSHOT_KEYS = ["pv", "pp", "px", "pa", "pc", "sd"] as const;
+
+export function parsePortfolioSnapshot(q: Params, now = Date.now()): PortfolioSnapshot | null {
+  const pv = q.get("pv");
+  const pc = q.get("pc");
+  const sd = q.get("sd");
+  if (pv === null || pc === null || sd === null) return null;
+  const value = num(pv, 0, 1e10);
+  const count = num(pc, 0, 1000);
+  const day = date(sd, now);
+  if (value === null || count === null || !Number.isInteger(count) || day === null) return null;
+  const pp = q.get("pp");
+  const pnl = pp === null ? null : num(pp, -1e10, 1e10);
+  if (pp !== null && pnl === null) return null;
+  const pa = q.get("pa");
+  const feeApr = pa === null ? null : num(pa, -1e6, 1e6);
+  if (pa !== null && feeApr === null) return null;
+  const px = q.get("px");
+  if (px !== null && px !== "1") return null;
+  return { value, pnl, pnlApprox: px === "1", feeApr, count, date: day };
+}
+
+export function portfolioSnapshotParams(s: PortfolioSnapshot): URLSearchParams {
+  const q = new URLSearchParams();
+  q.set("pv", r2(s.value).toFixed(2));
+  if (s.pnl !== null) q.set("pp", r2(s.pnl).toFixed(2));
+  if (s.pnlApprox && s.pnl !== null) q.set("px", "1");
+  if (s.feeApr !== null) q.set("pa", r2(s.feeApr).toFixed(2));
+  q.set("pc", String(s.count));
+  q.set("sd", s.date);
+  return q;
+}
+
+/** Rounds and validates like freezeSnapshot; drops optional fields that don't validate. */
+export function freezePortfolioSnapshot(raw: PortfolioSnapshot, now = Date.now()): PortfolioSnapshot | null {
+  const tries: PortfolioSnapshot[] = [raw, { ...raw, feeApr: null }, { ...raw, feeApr: null, pnl: null, pnlApprox: false }];
+  for (const t of tries) {
+    if (![t.value, t.pnl ?? 0, t.feeApr ?? 0].every(Number.isFinite)) continue;
+    const parsed = parsePortfolioSnapshot(portfolioSnapshotParams(t), now);
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+export function formatPortfolioSnapshot(s: PortfolioSnapshot) {
+  const pnl = s.pnl === null ? null : r2(s.pnl);
+  return {
+    value: fmtUsd(r2(s.value)),
+    pnl: pnl === null ? null : `${pnl < 0 ? "−" : "+"}${fmtUsd(Math.abs(pnl))}${s.pnlApprox ? " (approx.)" : ""}`,
+    feeApr: s.feeApr === null ? null : fmtApr(r2(s.feeApr) / 100),
+    count: `${s.count} position${s.count === 1 ? "" : "s"}`,
+    asOf: new Date(`${s.date}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }),
+  };
+}
+
+export function portfolioShareText(s: PortfolioSnapshot): string {
+  const f = formatPortfolioSnapshot(s);
+  const parts = [`${f.value} across ${f.count}`];
+  if (f.pnl) parts.push(`PnL vs HODL ${f.pnl}`);
+  if (f.feeApr) parts.push(`fee APR ${f.feeApr}`);
+  return `My Metric LP portfolio on Binwise: ${parts.join(" · ")} (as of ${f.asOf})`;
+}
+
+/** og:image query for the portfolio page: snapshot totals only (never the wallet), else the generic card. */
+export function portfolioOgQuery(snap: PortfolioSnapshot | null): string {
+  return snap ? `${portfolioSnapshotParams(snap)}&v=${OG_VERSION}` : `kind=portfolio&v=${OG_VERSION}`;
+}

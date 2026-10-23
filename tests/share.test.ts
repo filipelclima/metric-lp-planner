@@ -115,3 +115,33 @@ describe("freezeSnapshot", () => {
     expect(freezeSnapshot({ fees: 1e12, feeApr: 2, netApr: null, date: "2026-10-23", pair: null, binWidthE6: null }, NOW)).toBeNull();
   });
 });
+
+describe("portfolio snapshots", () => {
+  it("parses, round-trips and never needs the wallet", async () => {
+    const m = await import("@/lib/share");
+    const raw = { value: 1234.567, pnl: -45.678, pnlApprox: true, feeApr: 42.123, count: 3, date: "2026-10-23" };
+    const f = m.freezePortfolioSnapshot(raw, NOW)!;
+    expect(f).toEqual({ value: 1234.57, pnl: -45.68, pnlApprox: true, feeApr: 42.12, count: 3, date: "2026-10-23" });
+    const qs = m.portfolioOgQuery(f);
+    expect(qs).toBe("pv=1234.57&pp=-45.68&px=1&pa=42.12&pc=3&sd=2026-10-23&v=2");
+    expect(qs).not.toMatch(/0x|wallet/);
+    expect(m.parsePortfolioSnapshot(q(qs), NOW)).toEqual(f);
+    expect(m.portfolioOgQuery(null)).toBe("kind=portfolio&v=2");
+  });
+
+  it("formats card and tweet from the same strings", async () => {
+    const m = await import("@/lib/share");
+    const s = { value: 1234.57, pnl: -45.68, pnlApprox: true, feeApr: 42.12, count: 1, date: "2026-10-23" };
+    const f = m.formatPortfolioSnapshot(s);
+    expect(f).toEqual({ value: "$1,234.57", pnl: "−$45.68 (approx.)", feeApr: "42.12%", count: "1 position", asOf: "Oct 23, 2026" });
+    const t = m.portfolioShareText(s);
+    for (const v of [f.value, f.pnl!, f.feeApr!, f.count, f.asOf]) expect(t).toContain(v);
+  });
+
+  it("rejects text, negative or fractional counts, bad flags and out-of-range values", async () => {
+    const m = await import("@/lib/share");
+    for (const bad of ["pv=abc&pc=1&sd=2026-10-23", "pv=1&pc=-1&sd=2026-10-23", "pv=1&pc=1.5&sd=2026-10-23", "pv=1&pc=1&sd=2026-10-23&px=yes", "pv=-5&pc=1&sd=2026-10-23", "pv=1&pc=1&sd=2026-10-23&pp=1e5", "pv=1&pc=5000&sd=2026-10-23"]) {
+      expect(m.parsePortfolioSnapshot(q(bad), NOW), bad).toBeNull();
+    }
+  });
+});

@@ -4,7 +4,16 @@ import { fetchJsonWithTimeout } from "@/lib/fetchTimeout";
 import { normalizePool } from "@/lib/normalize";
 import { computeEstimate, resolveRange } from "@/lib/plan";
 import { CHAINS, type Pool, type RawBinsResponse, type RawPool } from "@/lib/types";
-import { formatSnapshot, parseSnapshot, rawRange, snapshotRangeText, type Snapshot } from "@/lib/share";
+import {
+  formatPortfolioSnapshot,
+  formatSnapshot,
+  parsePortfolioSnapshot,
+  parseSnapshot,
+  rawRange,
+  snapshotRangeText,
+  type PortfolioSnapshot,
+  type Snapshot,
+} from "@/lib/share";
 import { readState, type PlannerState } from "@/lib/urlState";
 
 export const runtime = "edge";
@@ -26,6 +35,10 @@ interface CardView {
   stats: { label: string; value: string; color: string }[] | null;
   /** Set for snapshot cards: the date the numbers were captured. */
   asOf?: string;
+  /** Top-right label; defaults to the planner's. */
+  kicker?: string;
+  /** Call to action shown instead of stats. */
+  cta?: string;
 }
 
 const shortAddr = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -45,7 +58,12 @@ export async function GET(req: Request) {
   try {
     const s = readState(params);
     const snap = parseSnapshot(params);
-    if (snap) {
+    const pf = parsePortfolioSnapshot(params);
+    if (pf) {
+      view = portfolioView(pf);
+    } else if (params.get("kind") === "portfolio") {
+      view = { pair: "Metric LP portfolio", chain: null, plan: "Value, fees and PnL of any wallet's Metric positions", stats: null, kicker: "LP portfolio · Metric", cta: "Open to see live positions" };
+    } else if (snap) {
       view = snapshotView(s, rawRange(params), snap);
     } else {
       const data = await loadData(s);
@@ -96,6 +114,23 @@ async function loadData(s: PlannerState): Promise<{ pool: Pool | null; binData: 
     binData = null;
   }
   return { pool, binData, binsFailed: !binData };
+}
+
+/** Portfolio card: totals only — the wallet address is never part of the image. */
+function portfolioView(pf: PortfolioSnapshot): CardView {
+  const f = formatPortfolioSnapshot(pf);
+  return {
+    pair: "Metric LP portfolio",
+    chain: null,
+    plan: `${f.count}${f.feeApr ? ` · value-weighted fee APR ${f.feeApr}` : ""}`,
+    stats: [
+      { label: "Total value", value: f.value, color: COLORS.text },
+      { label: pf.pnlApprox ? "PnL vs HODL (approx.)" : "PnL vs HODL", value: f.pnl?.replace(" (approx.)", "") ?? "—", color: pf.pnl === null ? COLORS.faint : pf.pnl < 0 ? COLORS.bad : COLORS.good },
+      { label: "Fee APR", value: f.feeApr ?? "—", color: COLORS.accent },
+    ],
+    asOf: f.asOf,
+    kicker: "LP portfolio · Metric",
+  };
 }
 
 const chainLabel = (s: PlannerState) => (s.chain !== null ? (CHAINS[s.chain]?.name ?? `Chain ${s.chain}`) : null);
@@ -158,7 +193,7 @@ function Card({ view }: { view: CardView }) {
           </div>
           <div style={{ display: "flex", fontSize: 34, fontWeight: 700, letterSpacing: -1 }}>Binwise</div>
         </div>
-        <div style={{ display: "flex", fontSize: 22, color: COLORS.faint }}>LP plan · Metric pools</div>
+        <div style={{ display: "flex", fontSize: 22, color: COLORS.faint }}>{view.kicker ?? "LP plan · Metric pools"}</div>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 20, marginTop: 56 }}>
@@ -182,7 +217,7 @@ function Card({ view }: { view: CardView }) {
         <div
           style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "auto", background: COLORS.surface, borderRadius: 20, padding: "36px 36px" }}
         >
-          <div style={{ display: "flex", fontSize: 40, fontWeight: 700, color: COLORS.accent }}>Open to see live estimates</div>
+          <div style={{ display: "flex", fontSize: 40, fontWeight: 700, color: COLORS.accent }}>{view.cta ?? "Open to see live estimates"}</div>
           <div style={{ display: "flex", fontSize: 40, color: COLORS.accent }}>→</div>
         </div>
       )}
