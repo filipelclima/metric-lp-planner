@@ -28,8 +28,10 @@ interface CardView {
 const shortAddr = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
 /**
- * 1200×630 share card for the plan in the URL (same params as the page, plus optional `pair`).
- * Always answers 200 with a PNG: if Metric is slow or down it renders the plan without numbers.
+ * 1200×630 share card for the plan in the URL (same params as the page).
+ * Always answers 200 with a complete PNG: if Metric is slow or down it renders the plan without
+ * numbers, and the image is rendered into a buffer first so a render error can never produce a
+ * truncated body — crawlers get a fixed Content-Length.
  */
 export async function GET(req: Request) {
   const params = new URL(req.url).searchParams;
@@ -43,10 +45,24 @@ export async function GET(req: Request) {
   } catch {
     view = { pair: params.get("pair") ?? "Metric pool", chain: null, plan: "LP plan", stats: null };
   }
-  return new ImageResponse(<Card view={view} />, {
-    width: W,
-    height: H,
-    headers: { "cache-control": live ? CACHE_LIVE : CACHE_PLAN_ONLY },
+
+  let png: ArrayBuffer;
+  try {
+    png = await new ImageResponse(<Card view={view} />, { width: W, height: H }).arrayBuffer();
+  } catch {
+    live = false;
+    png = await new ImageResponse(<Card view={{ pair: "Binwise LP plan", chain: null, plan: "Open to see the plan", stats: null }} />, {
+      width: W,
+      height: H,
+    }).arrayBuffer();
+  }
+  return new Response(png, {
+    status: 200,
+    headers: {
+      "content-type": "image/png",
+      "content-length": String(png.byteLength),
+      "cache-control": live ? CACHE_LIVE : CACHE_PLAN_ONLY,
+    },
   });
 }
 

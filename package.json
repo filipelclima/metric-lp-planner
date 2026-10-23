@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "fixtures": "bash scripts/fetch-fixtures.sh"
+    "fixtures": "bash scripts/fetch-fixtures.sh",
+    "check-share": "bash scripts/check-share.sh"
   },
   "dependencies": {
     "framer-motion": "^12.43.0",
