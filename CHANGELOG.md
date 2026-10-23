@@ -4,6 +4,24 @@ One entry per task, newest first. Each entry lists what changed, what couldn't b
 
 ## Entries
 
+### 2026-10-23 · `8917d5a` · Range UX: preset coverage, Wider, bin inputs, token USD
+- **Changed:**
+  - Preset buttons show their range and real coverage (e.g. "#-2…#0 / 96%"). When 80/90/95% give the same range, a note says "This pool is concentrated: 3 bins hold 96% of volume, so these presets match."
+  - New **Wider** preset: the 95% range + 2 bins each side.
+  - Bin inputs accept "+1" and "−2" (unicode minus), which fixes "+1" resetting to 0. Other characters are rejected with an inline hint and the last valid value is kept. Out-of-range values clamp to the pool's bins with a visible note. −/+ steppers, and a "#-2 = -0.06%" edge label under each input.
+  - Results briefly glow when they change.
+  - "You'll need" shows each token's USD value and the total, or "price n/a". The same text is used by Copy plan and Compare's "Tokens needed" row.
+  - Helper text for Distribution and Data period.
+  - Everything above also applies to the Compare scenario editors.
+  - New `src/lib/rangeInputs.ts` and `src/components/RangeControls.tsx`. `calc.ts`, `urlState.ts` and the existing tests are untouched. 10 new tests (128 total).
+- **Couldn't test:** Live SPCX/USDG (Metric is blocked in the sandbox). Verified with unit tests (including a 3-bins-hold-96% fixture) and Playwright against the local mock: "+1", "−2", "x", "99" (clamped to #6), empty, steppers, Wider, Compare editors, mobile. The mock pool isn't concentrated, so the note was only checked in tests, not on screen.
+- **Review:**
+  - Wider is stored as a manual range (`from`/`to`, no `preset` param), so `urlState.ts` stays unchanged. It doesn't follow a period change, and the button lights up whenever a manual range equals it.
+  - Clamping (typed bins and Wider) uses the bins the analytics return. At the pool's edge, Wider can equal the 95% range, as on the mock.
+  - Coverage is rounded down ("80%" never shows less than its target).
+  - The results glow also fires on deposit, duration and period changes.
+  - In Compare, the sub-labels show the raw presets; the header still shows the range after the distinct-range widening.
+
 ### 2026-10-23 · `fbfc233` · Compare: distinct ranges in concentrated pools
 - **Changed:**
   - A 90/95% preset that isn't strictly wider than the previous smaller preset (same pool) becomes that range widened by 1 bin (90%) or 2 bins (95%) on each side. Defaults are therefore A = 80%, B = A ± 1, C = B ± 2, unless the real presets are already wider.
