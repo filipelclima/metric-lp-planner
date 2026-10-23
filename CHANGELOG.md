@@ -4,6 +4,17 @@ One entry per task, newest first. Each entry lists what changed, what couldn't b
 
 ## Entries
 
+### 2026-10-23 · `bfccd0a` · Portfolio: 24h rates for young positions
+- **Changed:**
+  - Positions held less than 2 days take fee and net APR from the 24h bin analytics, applied over the whole holding time (capped at 2 days); otherwise 7d.
+  - 24h analytics are fetched only for pools with young positions, falling back to 7d if that request fails.
+  - Labels follow the window: "(from 24h rates)", "Your fee APR (24h)", "Bins' 24h net APR (pool)", the strip hint and insights.
+- **Couldn't test:** The live wallet (Metric RPC and API are blocked in the sandbox). Verified with unit tests and a local mock at a 28.5h deposit age; the mock serves the same data for 24h and 7d, so the real 24h numbers are unchecked.
+- **Review:**
+  - The 2-day threshold.
+  - A position between 1 and 2 days old applies the last 24h rate to its whole holding time, which may differ from what it earned on day one.
+  - The summary labels its rates "24h/7d" when positions mix windows.
+
 ### 2026-10-23 · `9ca462f` · Portfolio: fees and net from each bin's 7d APR
 - **Changed:**
   - Est. fees = Σ value_b × aprBps_b/1e4 × heldDays/365, with heldDays capped at 7d. It previously used current share × window fees.
