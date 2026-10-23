@@ -4,6 +4,21 @@ One entry per task, newest first. Each entry lists what changed, what couldn't b
 
 ## Entries
 
+### 2026-10-23 · `ebe5f2e` · Compare ranges
+- **Changed:**
+  - `/compare`: up to 3 scenarios (A/B/C, defaults Narrow 80%, Medium 90%, Wide 95%) with editable bins, distribution and an optional different pool (same deposit). Linked from the planner hero.
+  - Table with best-per-row highlights: range, volume covered, share of liquidity, fee APR, est. fees, net APR and net $, price drag, tokens needed, idle bins, verdict.
+  - Overlay histogram (teal/violet/amber), fee vs net bars, hover linking, mobile tabs with swipe.
+  - `cmp` URL state, and a validated compare share card (2–3 columns).
+  - Pure logic in `src/lib/compare.ts`; `calc.ts`, `urlState.ts` and existing tests untouched. 111 tests passing.
+- **Couldn't test:** Live Metric data (blocked in the sandbox). Verified against a local mock with desktop and mobile screenshots and a rendered share card; not checked on X.
+- **Review:**
+  - Idle bin = under 0.1% of the window's volume.
+  - Scenarios on a different pool aren't drawn on the histogram (it shows the main pool's bins).
+  - "Your share of liquidity" highlights the highest share, which favors narrow ranges.
+  - Verdict wording and priority (max two phrases per scenario).
+  - "Price drag" = fee APR − net APR, lower is better.
+
 ### 2026-10-23 · `2fed16d` · Top pools: resilient fetch, price-driven chip, safer highlights
 - **Changed:**
   - `/api/pools-ranking` gives each page request a 20s timeout and 2 retries (400ms, 1.2s backoff), and fetches the remaining pages in parallel after the first.
