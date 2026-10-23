@@ -8,6 +8,8 @@ import {
   concentrationNote,
   edgeLabel,
   fmtCoverage,
+  hasVolume,
+  NO_VOLUME_PRESETS,
   parseBinInput,
   presetOptions,
   presetSubLabel,
@@ -46,7 +48,9 @@ export const flashCls = (on: boolean) => `transition-shadow duration-500 ${on ? 
  * ("#-2…#0 (96%)"), and a note explains when a concentrated pool makes several presets match.
  */
 export function PresetPicker({ data, value, onPick, size = "md" }: { data: BinData | null; value: PresetKey | "manual"; onPick: (k: PresetKey | "manual") => void; size?: "sm" | "md" }) {
-  const options = data ? presetOptions(data) : null;
+  // Without volume, presets fall back to ±5 bins: hide the coverage labels and say why instead.
+  const noVolume = data !== null && !hasVolume(data);
+  const options = data && !noVolume ? presetOptions(data) : null;
   const note = options ? concentrationNote(options) : null;
   const keys: (PresetKey | "manual")[] = [80, 90, 95, "wider", "manual"];
   return (
@@ -83,6 +87,7 @@ export function PresetPicker({ data, value, onPick, size = "md" }: { data: BinDa
         })}
       </div>
       {note && <p className="mt-1.5 text-[11px] leading-snug text-warn">{note}</p>}
+      {noVolume && <p className="mt-1.5 text-[11px] leading-snug text-faint">{NO_VOLUME_PRESETS}: nothing traded in this data period, so 80/90/95% can&apos;t be computed.</p>}
     </div>
   );
 }

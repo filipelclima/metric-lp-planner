@@ -11,7 +11,10 @@ Think *Poolfish (uniswap.fish) for Metric*.
 - Searchable pool list across **Ethereum (1)**, **BNB Chain (56)** and **Robinhood Chain (4663)**, showing TVL, APR and tier badge.
   - Sortable Pair / Chain / TVL / APR headers (click again to flip; ▲▼ shows the direction). Pools without an APR show "—" and always sort last.
   - APR period 24h (`analytics24h.aprBps`) or **7d** (`aprBps7d`); TVL filter Any / **≥$10k** / ≥$100k / ≥$1M; chain filter.
-  - Remembered in the page URL (`psort`, `pdir`, `papr`, `ptvl`, `pchain`; only non-defaults, never in share links) and in localStorage. A URL with picker params wins over storage.
+  - Search combines with the filters; the list says "Showing X of Y pools".
+  - **Inactive pools** (no 7d volume and TVL < $10k) are hidden unless "Show inactive pools" is on. `/metadata` has no 7d volume, so "no 7d volume" = 7d fee APR 0/missing and no 24h volume.
+  - Remembered in the page URL (`psort`, `pdir`, `papr`, `ptvl`, `pchain`, `pinactive`; only non-defaults, never in share links) and in localStorage. A URL with picker params wins over storage.
+- **No trades**: when the data window has 0 volume, the hero shows "No trades in the last 7d: this pool earned no fees, so there's nothing to estimate." with buttons for longer data periods that do have volume and "Pick another pool". Presets then show "Presets need trading volume" instead of coverage.
 - Deposit (USD), duration (30/60/90 days or custom) and data period (24h / **7d** / 30d).
 - Ranges:
   - **Auto presets**: the smallest contiguous bin range around the current bin that covers 80/90/95% of the period's volume.
@@ -203,6 +206,7 @@ src/lib/usePlanner.ts  client hook: URL sync, data fetching, derived estimate
 src/app/api/**         proxy route handlers + /api/og share image
 src/lib/rangeInputs.ts bin input parsing/clamping, preset summaries, Wider, tokens needed (pure)
 src/lib/poolList.ts    pool picker: sort, filters, APR period, URL/localStorage prefs (pure)
+src/lib/noTrades.ts    empty state for windows with no trades (pure)
 src/lib/compare.ts     compare ranges: metrics, best per row, verdicts, cmp URL encoding (pure)
 src/lib/ranking.ts     top pools: rows, filters, sorting, highlights, weekly post (pure)
 src/lib/portfolio/     portfolio: ABIs, pure model (decoding, positions, value, HODL, status, insights), server loader

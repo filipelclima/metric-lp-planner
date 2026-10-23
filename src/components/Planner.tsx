@@ -6,6 +6,7 @@ import { usePlanner } from "@/lib/usePlanner";
 import BinDetails from "./BinDetails";
 import ConfigPanel from "./ConfigPanel";
 import Hero from "./Hero";
+import { OPEN_PICKER_EVENT } from "./PoolPicker";
 import Histogram from "./Histogram";
 import { RiskDrawer } from "./Risk";
 import { HowItWorks, PoolStats } from "./SideCards";
@@ -19,6 +20,11 @@ export default function Planner() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [hovered, setHovered] = useState<number | null>(null);
   const hasBins = !!(pool && binData && range && estimate?.source === "bins");
+  // Opens the pool picker: in the bottom sheet on mobile, in the sidebar on desktop.
+  const pickAnotherPool = () => {
+    if (window.matchMedia("(max-width: 1023px)").matches) setSheetOpen(true);
+    setTimeout(() => window.dispatchEvent(new Event(OPEN_PICKER_EVENT)), 60);
+  };
 
   return (
     <div className="grid gap-5 lg:grid-cols-[340px_minmax(0,1fr)] lg:items-start">
@@ -39,7 +45,7 @@ export default function Planner() {
           </Card>
         )}
 
-        <Hero m={m} onOpenRisk={() => setRiskOpen(true)} />
+        <Hero m={m} onOpenRisk={() => setRiskOpen(true)} onPickPool={pickAnotherPool} />
 
         {pool && (
           <Card className="p-5">

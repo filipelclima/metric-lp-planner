@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_PREFS,
   filterSortPools,
+  isInactivePool,
   pickerParams,
   poolApr,
   readPickerPrefs,
@@ -37,7 +38,7 @@ const pairs = (p: PickerPrefs, q = "") => filterSortPools(POOLS, p, q).pools.map
 describe("pool picker sorting & filters", () => {
   it("defaults: TVL ≥ $10k, TVL high → low", () => {
     expect(pairs(DEFAULT_PREFS)).toEqual(["AAA", "DDD", "EEE", "BBB"]);
-    expect(filterSortPools(POOLS, DEFAULT_PREFS).hiddenByTvl).toBe(1);
+    expect(filterSortPools(POOLS, DEFAULT_PREFS).total).toBe(5); // "Showing 4 of 5 pools"
   });
 
   it("TVL floors", () => {
@@ -77,14 +78,14 @@ describe("pool picker sorting & filters", () => {
 });
 
 describe("pool picker persistence", () => {
-  const custom: PickerPrefs = { sort: "apr", dir: "asc", period: "24h", minTvl: 1e6, chain: 56 };
+  const custom: PickerPrefs = { sort: "apr", dir: "asc", period: "24h", minTvl: 1e6, chain: 56, showInactive: true };
 
   it("URL round trip; defaults write nothing", () => {
     expect(pickerParams(DEFAULT_PREFS).toString()).toBe("");
     const q = pickerParams(custom);
-    expect(q.toString()).toBe("psort=apr&pdir=asc&papr=24h&ptvl=1m&pchain=56");
+    expect(q.toString()).toBe("psort=apr&pdir=asc&papr=24h&ptvl=1m&pchain=56&pinactive=1");
     expect(readPickerPrefs(q, null)).toEqual(custom);
-    expect(withPickerParams("chain=56&amount=1", custom)).toBe("chain=56&amount=1&psort=apr&pdir=asc&papr=24h&ptvl=1m&pchain=56");
+    expect(withPickerParams("chain=56&amount=1", custom)).toBe("chain=56&amount=1&psort=apr&pdir=asc&papr=24h&ptvl=1m&pchain=56&pinactive=1");
     expect(withPickerParams("chain=56", DEFAULT_PREFS)).toBe("chain=56");
   });
 
@@ -98,5 +99,34 @@ describe("pool picker persistence", () => {
     expect(readPickerPrefs(new URLSearchParams("psort=evil&pdir=x&papr=1y&ptvl=5&pchain=999"), null)).toEqual(DEFAULT_PREFS);
     expect(readPickerPrefs(new URLSearchParams(""), "{not json")).toEqual(DEFAULT_PREFS);
     expect(readPickerPrefs(new URLSearchParams(""), null)).toEqual(DEFAULT_PREFS);
+  });
+});
+
+describe("inactive pools", () => {
+  // TEST/WETH-like: 0 swaps in 24h and 7d, tiny TVL.
+  const dead = pool(10, "TST/WETH", 1, 3_000, 0, null);
+  const deadNo24h = { ...pool(11, "TSU/WETH", 1, 9_000, null, 0), analytics24h: { fromTs: 0, toTs: 86400, feesFiat: 0, tvlFiat: 9000, volumeFiat: 0, aprBps: 0 } } as Pool;
+  const bigIdle = pool(12, "BIG/WETH", 1, 500_000, 0, 0); // no trades but ≥ $10k TVL → not inactive
+  const smallBusy = pool(13, "SML/WETH", 1, 2_000, 4000, 4000); // small but trading → not inactive
+  const list = [...POOLS, dead, deadNo24h, bigIdle, smallBusy];
+
+  it("no 7d volume and TVL < $10k", () => {
+    expect([dead, deadNo24h, bigIdle, smallBusy].map(isInactivePool)).toEqual([true, true, false, false]);
+  });
+
+  it("hidden by default even with TVL = Any; 'Show inactive pools' brings them back; combines with search", () => {
+    const any: PickerPrefs = { ...DEFAULT_PREFS, minTvl: 0 };
+    const names = (p: PickerPrefs, q = "") => filterSortPools(list, p, q).pools.map((x) => x.pair);
+    expect(names(any)).not.toContain("TST/WETH");
+    expect(names(any)).toContain("SML/WETH");
+    expect(names({ ...any, showInactive: true })).toEqual(expect.arrayContaining(["TST/WETH", "TSU/WETH"]));
+    expect(names({ ...any, showInactive: true }, "weth")).toHaveLength(4);
+    expect(names(any, "weth")).toEqual(["BIG/WETH", "SML/WETH"]);
+    expect(filterSortPools(list, any).total).toBe(9);
+  });
+
+  it("the toggle round-trips through the URL", () => {
+    expect(readPickerPrefs(new URLSearchParams("pinactive=1"), null).showInactive).toBe(true);
+    expect(readPickerPrefs(new URLSearchParams("pinactive=yes"), null).showInactive).toBe(false);
   });
 });

@@ -60,6 +60,11 @@ export const WIDER_EXTRA = 2;
 
 const totalVolume = (d: BinData) => d.bins.reduce((a, b) => a + b.volumeFiat, 0);
 
+/** Whether anything traded in the data window (presets, coverage and fee estimates all need volume). */
+export const hasVolume = (d: BinData) => totalVolume(d) > 0;
+
+export const NO_VOLUME_PRESETS = "Presets need trading volume";
+
 /** Share of the window's volume inside [from, to]; null without volume. */
 export function coverage(data: BinData, from: number, to: number): number | null {
   const total = totalVolume(data);
@@ -103,6 +108,7 @@ export const presetSubLabel = (o: PresetOption) => `#${o.from}…#${o.to} (${fmt
  * 80/90/95% presets give the same range; null otherwise.
  */
 export function concentrationNote(options: PresetOption[]): string | null {
+  if (options.some((o) => o.coverage === null)) return null; // no volume: nothing is "concentrated"
   const shares = options.filter((o) => o.key !== "wider");
   const groups = new Map<string, PresetOption[]>();
   for (const o of shares) groups.set(`${o.from}:${o.to}`, [...(groups.get(`${o.from}:${o.to}`) ?? []), o]);

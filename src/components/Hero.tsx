@@ -9,6 +9,7 @@ import {
   fmtPlanPct,
   fmtUsd,
   getBin,
+  parseBins,
   planText,
   poolDailyFees,
   poolWindowDailyFees,
@@ -18,8 +19,10 @@ import {
   type Estimate,
 } from "@/lib/calc";
 import { NET_NOTE } from "@/lib/plan";
-import { rangeEdgesNote, tokenNeeds } from "@/lib/rangeInputs";
-import type { Period, Pool } from "@/lib/types";
+import { noTradesState } from "@/lib/noTrades";
+import { hasVolume, rangeEdgesNote, tokenNeeds } from "@/lib/rangeInputs";
+import { useApi } from "@/lib/useApi";
+import type { Period, Pool, RawBinsResponse } from "@/lib/types";
 import type { PlannerModel } from "@/lib/usePlanner";
 import { flashCls, useFlash } from "./RangeControls";
 import { RiskAlert, RiskPills } from "./Risk";
@@ -35,7 +38,7 @@ const aprText = (v: number) => fmtApr(v);
 const stagger: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.07 } } };
 const rise: Variants = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" } } };
 
-export default function Hero({ m, onOpenRisk }: { m: PlannerModel; onOpenRisk: () => void }) {
+export default function Hero({ m, onOpenRisk, onPickPool }: { m: PlannerModel; onOpenRisk: () => void; onPickPool: () => void }) {
   const { pool, estimate, binData, range, s, bins, meta } = m;
   const reduced = useReducedMotion();
   const flash = useFlash(`${range?.from}:${range?.to}:${s.strategy}:${s.amount}:${s.days}:${s.period}`);
@@ -55,6 +58,10 @@ export default function Hero({ m, onOpenRisk }: { m: PlannerModel; onOpenRisk: (
         </div>
       </Card>
     );
+  }
+
+  if (estimate.source === "bins" && binData && !hasVolume(binData)) {
+    return <NoTradesHero m={m} data={binData} onOpenRisk={onOpenRisk} onPickPool={onPickPool} />;
   }
 
   const days = s.days;
@@ -589,5 +596,50 @@ function EmptyHero() {
         tells you exactly which bins to fill.
       </p>
     </Card>
+  );
+}
+
+/**
+ * Replaces the hero numbers when the data window had no trades: no fees were earned, so there's nothing to
+ * estimate. Offers longer data periods that do have volume (fetched here) and picking another pool.
+ */
+function NoTradesHero({ m, data, onOpenRisk, onPickPool }: { m: PlannerModel; data: BinData; onOpenRisk: () => void; onPickPool: () => void }) {
+  const { s, pool } = m;
+  const base = s.chain !== null && s.pool ? `/api/pools/${s.chain}/${s.pool}/bins?period=` : null;
+  // Fixed hook count: 7d and 30d are only fetched when longer than the current period.
+  const d7 = useApi<RawBinsResponse>(base && s.period === "24h" ? `${base}7d` : null);
+  const d30 = useApi<RawBinsResponse>(base && s.period !== "30d" ? `${base}30d` : null);
+  const parse = (r: RawBinsResponse | null | undefined) => {
+    try {
+      return r ? parseBins(r) : null;
+    } catch {
+      return null;
+    }
+  };
+  const state = noTradesState(data, s.period, { "7d": parse(d7.data), "30d": parse(d30.data) });
+  const checking = d7.loading || d30.loading;
+  if (!state || !pool) return null;
+  return (
+    <div className="space-y-3">
+      <RiskPills pool={pool} onOpen={onOpenRisk} />
+      <Card className="p-6">
+        <p role="status" className="text-lg font-medium text-text">{state.message}</p>
+        <p className="mt-1 text-sm text-muted">
+          {pool.pair}&apos;s bins saw no swaps in this window. Fee estimates come from past trading, so they&apos;d all be $0.
+        </p>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          {state.switchTo.map((p) => (
+            <button key={p} type="button" onClick={() => m.set({ period: p })} className="rounded-lg bg-accent/15 px-3 py-1.5 text-sm font-medium text-accent transition hover:bg-accent/25">
+              Use {p} data
+            </button>
+          ))}
+          <button type="button" onClick={onPickPool} className="rounded-lg bg-surface-2 px-3 py-1.5 text-sm text-text transition hover:bg-surface-3">
+            Pick another pool
+          </button>
+          {checking && <span className="text-xs text-faint">Checking longer periods…</span>}
+          {!checking && state.switchTo.length === 0 && s.period !== "30d" && <span className="text-xs text-faint">Longer periods had no trades either.</span>}
+        </div>
+      </Card>
+    </div>
   );
 }

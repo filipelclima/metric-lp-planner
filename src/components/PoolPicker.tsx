@@ -7,6 +7,8 @@ import type { ApiState } from "@/lib/useApi";
 import type { PickerPrefsState } from "@/lib/usePickerPrefs";
 import { ChainBadge, ErrorNote, Segmented, Skeleton, TierBadge, TokenLogo, inputCls } from "./ui";
 
+export const OPEN_PICKER_EVENT = "binwise:open-pool-picker";
+
 interface Props {
   list: ApiState<{ pools: Pool[] }>;
   selected: Pool | null;
@@ -21,6 +23,13 @@ export default function PoolPicker({ list, selected, onSelect, hasSelection, pic
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [prefs, setPrefs] = picker;
+
+  // Lets other UI (e.g. the "no trades" empty state) open the picker.
+  useEffect(() => {
+    const show = () => setOpen(true);
+    window.addEventListener(OPEN_PICKER_EVENT, show);
+    return () => window.removeEventListener(OPEN_PICKER_EVENT, show);
+  }, []);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -30,7 +39,7 @@ export default function PoolPicker({ list, selected, onSelect, hasSelection, pic
     return () => document.removeEventListener("mousedown", close);
   }, [open, selected]);
 
-  const { pools, hiddenByTvl } = useMemo(() => filterSortPools(list.data?.pools ?? [], prefs, query), [list.data, prefs, query]);
+  const { pools, total } = useMemo(() => filterSortPools(list.data?.pools ?? [], prefs, query), [list.data, prefs, query]);
 
   return (
     <div ref={ref} className="relative">
@@ -96,7 +105,24 @@ export default function PoolPicker({ list, selected, onSelect, hasSelection, pic
                 options={TVL_FLOORS.map((v) => ({ value: v, label: TVL_LABEL[v] }))}
               />
             </span>
+            <label className="flex items-center gap-1.5 text-[11px] text-muted" title="Pools with no trades in the last 7 days and under $10k TVL are hidden by default.">
+              <input type="checkbox" checked={prefs.showInactive} onChange={(e) => setPrefs({ ...prefs, showInactive: e.target.checked })} className="accent-[var(--accent)]" />
+              Show inactive pools
+            </label>
           </div>
+          {!list.loading && total > 0 && (
+            <p className="mt-2 text-[11px] text-faint">
+              Showing {pools.length} of {total} pools
+              {pools.length < total && (prefs.minTvl > 0 || !prefs.showInactive) && (
+                <>
+                  {" · "}
+                  <button type="button" className="text-accent hover:underline" onClick={() => setPrefs({ ...prefs, minTvl: 0, showInactive: true })}>
+                    show all
+                  </button>
+                </>
+              )}
+            </p>
+          )}
           <div className="mt-2 max-h-96 overflow-y-auto overflow-x-hidden">
             {list.error && <ErrorNote message={list.error} retryAfter={list.retryAfter} onRetry={list.retry} />}
             {list.loading && (
@@ -157,14 +183,6 @@ export default function PoolPicker({ list, selected, onSelect, hasSelection, pic
                   ))}
                 </tbody>
               </table>
-            )}
-            {!list.loading && hiddenByTvl > 0 && (
-              <p className="py-2 text-center text-[11px] text-faint">
-                {hiddenByTvl} pool{hiddenByTvl === 1 ? "" : "s"} under {TVL_LABEL[prefs.minTvl].replace("≥", "")} TVL hidden ·{" "}
-                <button type="button" className="text-accent hover:underline" onClick={() => setPrefs({ ...prefs, minTvl: 0 })}>
-                  show all
-                </button>
-              </p>
             )}
           </div>
         </div>

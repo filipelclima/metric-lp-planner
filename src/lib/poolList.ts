@@ -20,9 +20,23 @@ export interface PickerPrefs {
   period: AprPeriod;
   minTvl: TvlFloor;
   chain: number | "all";
+  /** Also list inactive pools (no 7d volume and TVL < $10k). */
+  showInactive: boolean;
 }
 
-export const DEFAULT_PREFS: PickerPrefs = { sort: "tvl", dir: "desc", period: "7d", minTvl: 1e4, chain: "all" };
+export const DEFAULT_PREFS: PickerPrefs = { sort: "tvl", dir: "desc", period: "7d", minTvl: 1e4, chain: "all", showInactive: false };
+
+/** Pools under this TVL with no 7d trading count as inactive. */
+export const INACTIVE_TVL = 1e4;
+
+/**
+ * No trading in the last 7 days and TVL < $10k. /metadata has no 7d volume, so "no 7d volume" means a 7d fee
+ * APR of 0 (or missing) and no 24h volume: fees only come from swaps.
+ */
+export function isInactivePool(p: Pool): boolean {
+  const noTrades7d = !(p.aprBps7d ?? 0) && !(p.analytics24h?.volumeFiat ?? 0);
+  return noTrades7d && p.tvlFiat < INACTIVE_TVL;
+}
 
 /** Direction a column starts in when first clicked: text ascending, numbers high → low. */
 export const FIRST_DIR: Record<PoolSort, SortDir> = { pair: "asc", chain: "asc", tvl: "desc", apr: "desc" };
@@ -51,13 +65,15 @@ function matches(p: Pool, q: string): boolean {
 }
 
 /**
- * Filters by search, chain and TVL floor, then sorts. Pools without a value for the sort key (APR for the
- * period) always go last, whatever the direction. Ties: higher TVL first, then pair.
+ * Filters by search, chain, TVL floor and inactivity (all combined), then sorts. Pools without a value for the
+ * sort key (APR for the period) always go last, whatever the direction. Ties: higher TVL first, then pair.
+ * `total` is every pool loaded, for "Showing X of Y pools".
  */
-export function filterSortPools(pools: Pool[], prefs: PickerPrefs, query = ""): { pools: Pool[]; hiddenByTvl: number } {
+export function filterSortPools(pools: Pool[], prefs: PickerPrefs, query = ""): { pools: Pool[]; total: number } {
   const q = query.trim().toLowerCase();
-  const base = pools.filter((p) => (prefs.chain === "all" || p.chainId === prefs.chain) && matches(p, q));
-  const kept = base.filter((p) => p.tvlFiat >= prefs.minTvl);
+  const kept = pools.filter(
+    (p) => (prefs.chain === "all" || p.chainId === prefs.chain) && matches(p, q) && p.tvlFiat >= prefs.minTvl && (prefs.showInactive || !isInactivePool(p)),
+  );
   const key = (p: Pool): number | string | null =>
     prefs.sort === "pair" ? p.pair.toLowerCase() : prefs.sort === "chain" ? chainName(p.chainId) : prefs.sort === "tvl" ? p.tvlFiat : poolApr(p, prefs.period);
   const sign = prefs.dir === "asc" ? 1 : -1;
@@ -71,14 +87,14 @@ export function filterSortPools(pools: Pool[], prefs: PickerPrefs, query = ""): 
     }
     return b.tvlFiat - a.tvlFiat || a.pair.localeCompare(b.pair);
   });
-  return { pools: sorted, hiddenByTvl: base.length - kept.length };
+  return { pools: sorted, total: pools.length };
 }
 
 // ---------- persistence ----------
 // URL params (only non-defaults are written): psort=pair|chain|tvl|apr, pdir=asc|desc, papr=24h|7d,
-// ptvl=any|10k|100k|1m, pchain=<chainId>.
+// ptvl=any|10k|100k|1m, pchain=<chainId>, pinactive=1.
 
-export const PICKER_PARAMS = ["psort", "pdir", "papr", "ptvl", "pchain"] as const;
+export const PICKER_PARAMS = ["psort", "pdir", "papr", "ptvl", "pchain", "pinactive"] as const;
 export const PICKER_STORAGE_KEY = "binwise.poolPicker";
 
 const SORTS: PoolSort[] = ["pair", "chain", "tvl", "apr"];
@@ -97,6 +113,7 @@ function fromParams(get: (k: string) => string | null): PickerPrefs {
     period: period === "24h" || period === "7d" ? period : DEFAULT_PREFS.period,
     minTvl: tvl ? (Number(tvl[0]) as TvlFloor) : DEFAULT_PREFS.minTvl,
     chain: chain !== null && /^\d+$/.test(chain) && CHAINS[Number(chain)] ? Number(chain) : "all",
+    showInactive: get("pinactive") === "1",
   };
 }
 
@@ -122,11 +139,12 @@ export function pickerParams(p: PickerPrefs): URLSearchParams {
   if (p.period !== DEFAULT_PREFS.period) q.set("papr", p.period);
   if (p.minTvl !== DEFAULT_PREFS.minTvl) q.set("ptvl", TVL_CODE[p.minTvl]);
   if (p.chain !== "all") q.set("pchain", String(p.chain));
+  if (p.showInactive) q.set("pinactive", "1");
   return q;
 }
 
 /** JSON for localStorage, same keys as the URL. */
-export const serializePrefs = (p: PickerPrefs) => JSON.stringify({ psort: p.sort, pdir: p.dir, papr: p.period, ptvl: TVL_CODE[p.minTvl], pchain: p.chain === "all" ? null : String(p.chain) });
+export const serializePrefs = (p: PickerPrefs) => JSON.stringify({ psort: p.sort, pdir: p.dir, papr: p.period, ptvl: TVL_CODE[p.minTvl], pchain: p.chain === "all" ? null : String(p.chain), pinactive: p.showInactive ? "1" : null });
 
 /** Appends picker params to a page query string. */
 export function withPickerParams(qs: string, p: PickerPrefs): string {
