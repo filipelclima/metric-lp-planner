@@ -57,6 +57,29 @@ Think *Poolfish (uniswap.fish) for Metric*.
 - Motion: count-up numbers, staggered hero entrance, growing bars and an animated range overlay (framer-motion). All of it is disabled under `prefers-reduced-motion`.
 - Shareable URL, e.g. `?chain=56&pool=0x..&amount=1000&days=30&from=-8&to=7&strategy=uniform&period=7d`. A `preset=80|90|95` parameter keeps an auto preset live.
 
+## Describe your plan (planner)
+
+A text box at the top of the planner: type e.g. "Deposit $200 on AI/USDG with a medium range for 60 days" and press **Fill planner** (or Enter). It's a **rule-based parser, with no AI and no API keys**. It only fills the form; every number afterwards comes from the planner's own calc.
+
+- **Understood:**
+  - amounts: `$200`, `200$`, `200 dollars/usd/bucks`, `1.5k`, `2,000`; € is read as USD, with a note;
+  - pairs: `AI/USDG`, `AI-USDG`, `ai usdg`, `AI and USDG`, or a single token like "on SKHYB" (largest pool with it). Case-insensitive, ≤ 1 typo on symbols of 3+ chars;
+  - chains: BNB/BSC/Binance, Ethereum/ETH/mainnet, Robinhood/RH;
+  - range words: narrow/tight/small = 80%, medium/normal/balanced = 90%, wide/safe = 95%, very wide/wider/max = Wider;
+  - explicit bins: `#-3 to #2`, `bins -3 to 2`, `from -3 to +2`;
+  - width: `±0.1%` or `0.1% around the price` (bins whose edges cover that around the oracle price);
+  - duration: `60 days`, `60d`, `2 months`, `a quarter`, `1 week`, `a year`;
+  - distribution: even / curve / by fees;
+  - data period: `using 24h data`, `based on last week`, `30 days of data`.
+- Keywords also in Portuguese, Spanish, French, Turkish, Chinese, Vietnamese and Russian.
+- **Never guesses silently:**
+  - Same pair on several chains → chips to choose (unless one pool holds > 80% of their TVL: "Picked the largest pool").
+  - Unknown pair → "Couldn't find … Did you mean" with the 3 closest.
+  - No amount → keeps the current deposit and says so.
+  - A lone number is used as the deposit, and the summary says so.
+- After filling, a one-line summary is computed live from the planner: range, tokens needed with USD values, est. fees. **Undo** restores the previous form.
+- `src/lib/intent.ts`: `parseText` → `matchPool` → `parseIntent(text, pools)` behind an `IntentParser` interface, so a fallback parser could be added later without UI changes. No AI is used today.
+
 ## Compare ranges (`/compare`)
 
 Up to three ranges (A, B, C) side by side for the same deposit, duration and data period. Open it from the planner's "Compare ranges" link; it starts with Narrow 80%, Medium 90% and Wide 95% of the window's volume.
@@ -212,6 +235,7 @@ src/lib/rangeInputs.ts bin input parsing/clamping, preset summaries, Wider, toke
 src/lib/poolList.ts    pool picker: sort, filters, APR period, URL/localStorage prefs (pure)
 src/lib/activity.ts    "No trades" badge rule (pure)
 src/lib/noTrades.ts    empty state for windows with no trades (pure)
+src/lib/intent.ts      "Describe your plan" rule-based parser + pool matching (pure)
 src/lib/compare.ts     compare ranges: metrics, best per row, verdicts, cmp URL encoding (pure)
 src/lib/ranking.ts     top pools: rows, filters, sorting, highlights, weekly post (pure)
 src/lib/portfolio/     portfolio: ABIs, pure model (decoding, positions, value, HODL, status, insights), server loader
