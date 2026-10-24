@@ -4,6 +4,23 @@ One entry per task, newest first. Each entry lists what changed, what couldn't b
 
 ## Entries
 
+### 2026-10-24 · `a7a612b` · Fix: Describe your plan lost small pools
+- **Changed:**
+  - **Root cause.** An empty "Did you mean:" list means the parser matched against zero pools: the sentence was submitted before `/api/pools` had loaded.
+    - Submissions now wait for the pool list ("Loading Metric's pool list…").
+    - A failed list shows the error with Retry.
+  - **Matching.** TVL only re-ranks, never removes: pools ≥ $10k first, then TVL > $0, and $0 pools only when nothing else has the pair. A pick among small pools notes "Only small pools (under $10k TVL) have this pair".
+  - **`/api/pools`** now requests `minTvlFiat=0`, as Top pools and Portfolio already did, so tiny pools are in the list. The picker's default filters still hide them.
+  - **Not found.** No suggestions → "Couldn't find AI/USDG on Metric." instead of an empty "Did you mean:".
+  - 6 regression tests (224 total), with a pair whose only pools are two small ones plus several $0 ones.
+- **Couldn't test:** Live data (Metric is blocked in the sandbox). Verified in the browser against the mock with `/api/pools` delayed 4s and two small (+ three $0) AI/USDG pools injected. Your sentence, submitted immediately:
+  - waited for the list;
+  - showed "That pair has 2 pools on Robinhood" with two chips and no $0 pools;
+  - after picking, showed the "⚠ Tiny High-Risk pool ($2.2k TVL)" warning.
+- **Review:**
+  - I couldn't confirm whether Metric's default `/evm/metadata` (without `minTvlFiat=0`) excluded the small AI/USDG pools. The load race alone explains the empty suggestion list.
+  - The pool list is now larger (includes $0 pools), which may make `/api/pools` a little slower.
+
 ### 2026-10-24 · `1f2d8ec` · Describe your plan: ambiguity, risk warning, distinct ranges
 - **Changed:**
   - **Ambiguity.**
