@@ -2,11 +2,14 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { fmtUsd } from "@/lib/calc";
+import type { Pool } from "@/lib/types";
 import { usePlanner } from "@/lib/usePlanner";
 import BinDetails from "./BinDetails";
+import { SELECT_POOL_EVENT } from "./CommandPalette";
 import ConfigPanel from "./ConfigPanel";
 import DescribePlan from "./DescribePlan";
 import Hero from "./Hero";
+import Landing from "./Landing";
 import { OPEN_PICKER_EVENT } from "./PoolPicker";
 import Histogram from "./Histogram";
 import { RiskDrawer } from "./Risk";
@@ -22,10 +25,19 @@ export default function Planner() {
   const [hovered, setHovered] = useState<number | null>(null);
   const hasBins = !!(pool && binData && range && estimate?.source === "bins");
   // Opens the pool picker: in the bottom sheet on mobile, in the sidebar on desktop.
+  // ⌘K palette picks a pool while on the planner: switch in place, keeping deposit and duration.
+  useEffect(() => {
+    const onSelect = (e: Event) => m.selectPool((e as CustomEvent<Pool>).detail);
+    window.addEventListener(SELECT_POOL_EVENT, onSelect);
+    return () => window.removeEventListener(SELECT_POOL_EVENT, onSelect);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const pickAnotherPool = () => {
     if (window.matchMedia("(max-width: 1023px)").matches) setSheetOpen(true);
     setTimeout(() => window.dispatchEvent(new Event(OPEN_PICKER_EVENT)), 60);
   };
+
+  if (!s.pool) return <Landing m={m} />;
 
   return (
     <div className="space-y-4">
@@ -36,18 +48,11 @@ export default function Planner() {
           <Card className="p-5">
             <ConfigPanel m={m} />
           </Card>
-          {pool && <PoolStats pool={pool} />}
+          {pool ? <PoolStats pool={pool} /> : <Skeleton className="h-[164px] rounded-2xl" />}
           <HowItWorks pool={pool} />
         </aside>
 
         <section className="min-w-0 space-y-3">
-          {/* Mobile, before a pool is chosen: config inline above the empty hero */}
-          {!s.pool && (
-            <Card className="p-4 lg:hidden">
-              <ConfigPanel m={m} />
-            </Card>
-          )}
-
           <Hero m={m} onOpenRisk={() => setRiskOpen(true)} onPickPool={pickAnotherPool} />
 
           {pool && (
@@ -76,7 +81,7 @@ export default function Planner() {
                 title="Bin details"
                 open={detailsOpen}
                 onToggle={() => setDetailsOpen((o) => !o)}
-                right={<span className="num text-[11px] text-faint">{estimate!.positions.length} bins</span>}
+                right={<span className="num text-xs text-faint">{estimate!.positions.length} bins</span>}
               >
                 <BinDetails pool={pool!} data={binData!} estimate={estimate!} hovered={hovered} onHover={setHovered} />
               </Collapsible>
@@ -85,7 +90,7 @@ export default function Planner() {
 
           {/* Mobile: side cards after the results */}
           <div className="space-y-3 lg:hidden">
-            {pool && <PoolStats pool={pool} />}
+            {pool ? <PoolStats pool={pool} /> : <Skeleton className="h-[164px] rounded-2xl" />}
             <HowItWorks pool={pool} />
           </div>
         </section>

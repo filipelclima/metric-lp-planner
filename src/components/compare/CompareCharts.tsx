@@ -30,7 +30,7 @@ export function OverlayHistogram({ data, overlays, hovered, onHover }: { data: B
 
   return (
     <div>
-      <div className="mb-2 flex flex-wrap items-center gap-3 text-[11px] text-muted">
+      <div className="mb-2 flex flex-wrap items-center gap-3 text-xs text-muted">
         {overlays.map((o, i) => (
           <button
             key={o.label}
@@ -50,13 +50,13 @@ export function OverlayHistogram({ data, overlays, hovered, onHover }: { data: B
             <XAxis
               dataKey="idx"
               interval={0}
-              tick={{ fill: "#5b6577", fontSize: 10, fontFamily: "var(--font-mono)" }}
+              tick={{ fill: "#848fa2", fontSize: 12, fontFamily: "var(--font-mono)" }}
               tickFormatter={(v: number) => (v % step === 0 ? String(v) : "")}
               tickLine={false}
               axisLine={false}
             />
             <YAxis
-              tick={{ fill: "#5b6577", fontSize: 10, fontFamily: "var(--font-mono)" }}
+              tick={{ fill: "#848fa2", fontSize: 12, fontFamily: "var(--font-mono)" }}
               tickLine={false}
               axisLine={false}
               width={52}
@@ -71,7 +71,7 @@ export function OverlayHistogram({ data, overlays, hovered, onHover }: { data: B
                 const r = payload[0].payload as (typeof rows)[number];
                 const inside = overlays.filter((o) => r.idx >= o.from && r.idx <= o.to).map((o) => o.label);
                 return (
-                  <div className="num rounded-lg bg-surface-3 px-3 py-2 text-[11px] shadow-xl shadow-black/40">
+                  <div className="num rounded-lg bg-surface-3 px-3 py-2 text-xs shadow-xl shadow-black/40">
                     <div className="mb-1 font-medium text-text">
                       #{r.idx} <span className="text-faint">{fmtBinPct(r.mid, 4)}</span>
                     </div>
@@ -88,7 +88,7 @@ export function OverlayHistogram({ data, overlays, hovered, onHover }: { data: B
               ))}
             </Bar>
             {rows.some((r) => r.idx === data.curBinIdx) && (
-              <ReferenceLine x={data.curBinIdx} stroke="transparent" label={{ value: `active #${data.curBinIdx}`, position: "top", offset: 32, fill: "#e8ecf2", fontSize: 10 }} />
+              <ReferenceLine x={data.curBinIdx} stroke="transparent" label={{ value: `active #${data.curBinIdx}`, position: "top", offset: 32, fill: "#e8ecf2", fontSize: 12 }} />
             )}
           </ComposedChart>
         </ResponsiveContainer>
@@ -159,9 +159,9 @@ export function AprBars({ items, hovered, onHover }: { items: { label: string; f
       <ResponsiveContainer>
         <BarChart data={data} margin={{ top: 8, right: 4, bottom: 0, left: 0 }} barGap={4} onMouseLeave={() => onHover(null)}>
           <CartesianGrid vertical={false} stroke="#1a1f27" />
-          <XAxis dataKey="label" tick={{ fill: "#8a94a6", fontSize: 12 }} tickLine={false} axisLine={false} />
-          <YAxis tick={{ fill: "#5b6577", fontSize: 10, fontFamily: "var(--font-mono)" }} tickLine={false} axisLine={false} width={48} tickFormatter={(v) => `${Math.round(v)}%`} />
-          <ReferenceLine y={0} stroke="#5b6577" strokeOpacity={0.6} />
+          <XAxis dataKey="label" tick={{ fill: "#a6b0c0", fontSize: 12 }} tickLine={false} axisLine={false} />
+          <YAxis tick={{ fill: "#848fa2", fontSize: 12, fontFamily: "var(--font-mono)" }} tickLine={false} axisLine={false} width={48} tickFormatter={(v) => `${Math.round(v)}%`} />
+          <ReferenceLine y={0} stroke="#848fa2" strokeOpacity={0.6} />
           <Tooltip
             cursor={{ fill: "rgba(255,255,255,0.04)" }}
             isAnimationActive={false}
@@ -169,7 +169,7 @@ export function AprBars({ items, hovered, onHover }: { items: { label: string; f
               if (!active || !payload?.length) return null;
               const r = payload[0].payload as (typeof data)[number];
               return (
-                <div className="num rounded-lg bg-surface-3 px-3 py-2 text-[11px] shadow-xl shadow-black/40">
+                <div className="num rounded-lg bg-surface-3 px-3 py-2 text-xs shadow-xl shadow-black/40">
                   <div className="mb-1 font-sans font-medium">Scenario {r.label}</div>
                   <div className="text-accent">fee {fmtApr(r.fee / 100)}</div>
                   <div className={r.hasNet ? (r.net < 0 ? "text-bad" : "text-good") : "text-faint"}>net {r.hasNet ? fmtApr(r.net / 100) : "—"}</div>

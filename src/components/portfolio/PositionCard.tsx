@@ -5,15 +5,13 @@ import { useEffect, useRef, useState } from "react";
 import { fmtApr, fmtBinPct, fmtUsd, tickStep } from "@/lib/calc";
 import { NO_TRADES_LABEL, STATUS_LABEL, depositAgeText, metricPoolUrl, replanUrl, type RangeStatus } from "@/lib/portfolio/model";
 import type { PositionBinView, PositionView } from "@/lib/portfolio/types";
-import { Card, ChainBadge, InfoTip, TierBadge, TokenLogo } from "../ui";
+import { Callout, Card, ChainBadge, InfoTip, TierBadge, TokenLogo } from "../ui";
 
 const STATUS_STYLE: Record<RangeStatus, string> = {
   in: "bg-good/10 text-good",
   edge: "bg-warn/10 text-warn",
   out: "bg-bad/10 text-bad",
 };
-const TONE: Record<string, string> = { bad: "text-bad", warn: "text-warn", info: "text-muted", good: "text-good" };
-const DOT: Record<string, string> = { bad: "bg-bad", warn: "bg-warn", info: "bg-faint", good: "bg-good" };
 
 export const signedUsd = (v: number) => `${v < 0 ? "−" : "+"}${fmtUsd(Math.abs(v))}`;
 
@@ -74,11 +72,10 @@ export default function PositionCard({ p }: { p: PositionView }) {
 
       <PositionStrip p={p} />
 
-      <ul className="mt-4 space-y-1.5">
+      <ul className="mt-4 space-y-2">
         {p.insights.map((i) => (
-          <li key={i.text} className={`flex gap-2.5 text-[13px] leading-snug ${TONE[i.tone]}`}>
-            <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${DOT[i.tone]}`} />
-            {i.text}
+          <li key={i.text}>
+            <Callout tone={i.tone}>{i.text}</Callout>
           </li>
         ))}
       </ul>
@@ -131,7 +128,7 @@ function Stat({
 }) {
   return (
     <div className="min-w-0">
-      <div className="flex items-start gap-1.5 text-[10px] font-medium uppercase leading-snug tracking-[0.08em] text-faint">
+      <div className="flex items-start gap-1.5 text-xs font-medium uppercase leading-snug tracking-[0.08em] text-faint">
         <span>
           {label}
           {sub && <span className="ml-1 normal-case tracking-normal">({sub})</span>}
@@ -140,7 +137,7 @@ function Stat({
       </div>
       <div className={`num mt-1 truncate ${big ? "text-2xl font-semibold" : "text-lg"} ${tone}`}>
         {value}
-        {badge && <span className="ml-1.5 align-middle font-sans text-[10px] text-faint">{badge}</span>}
+        {badge && <span className="ml-1.5 align-middle font-sans text-xs text-faint">{badge}</span>}
       </div>
     </div>
   );
@@ -151,14 +148,14 @@ export function ResultRow({ pnlUsd, pnlApprox, annualized, tip }: { pnlUsd: numb
   const tone = pnlUsd === null ? "text-faint" : pnlUsd < 0 ? "text-bad" : "text-good";
   return (
     <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl bg-surface-2/70 px-4 py-3">
-      <span className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
+      <span className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.08em] text-faint">
         Your result
         <InfoTip>{tip}</InfoTip>
       </span>
       <span className="flex items-baseline gap-2">
         <span className="text-[12px] text-muted">PnL vs HODL</span>
         <span className={`num text-lg ${tone}`}>{pnlUsd === null ? "—" : signedUsd(pnlUsd)}</span>
-        {pnlApprox && pnlUsd !== null && <span className="text-[10px] text-faint">approx.</span>}
+        {pnlApprox && pnlUsd !== null && <span className="text-xs text-faint">approx.</span>}
       </span>
       <span className="flex items-baseline gap-2" title={annualized === null ? "Shown after 1 day held" : undefined}>
         <span className="text-[12px] text-muted">annualized</span>
@@ -222,7 +219,7 @@ function PositionStrip({ p }: { p: PositionView }) {
 
   return (
     <div className="mt-5">
-      <div className="mb-1.5 flex items-center justify-between text-[10px] uppercase tracking-[0.08em] text-faint">
+      <div className="mb-1.5 flex items-center justify-between text-xs uppercase tracking-[0.08em] text-faint">
         <span>Your bins</span>
         <span className="normal-case tracking-normal">{netMode ? "colored by 7d net APR" : "hover to color by 7d net APR"}</span>
       </div>
@@ -245,7 +242,7 @@ function PositionStrip({ p }: { p: PositionView }) {
             );
           })}
         </div>
-        <div className="num mt-1 flex h-3.5 gap-[2px] text-[9px] leading-none">
+        <div className="num mt-1 flex h-3.5 gap-[2px] text-xs leading-none">
           {cells.map((i) => {
             const b = byIdx.get(i);
             const show = i === p.curBinIdx || (!!b && b.share > 0 && i % step === 0 && Math.abs(i - p.curBinIdx) >= step);
@@ -266,10 +263,10 @@ function PositionStrip({ p }: { p: PositionView }) {
 
 function StripTip({ idx, b, active }: { idx: number; b: PositionBinView | undefined; active: boolean }) {
   return (
-    <div className="num pointer-events-none absolute -top-2 right-0 z-10 -translate-y-full rounded-lg bg-surface-3 px-3 py-2 text-[11px] shadow-xl shadow-black/40">
+    <div className="num pointer-events-none absolute -top-2 right-0 z-10 -translate-y-full rounded-lg bg-surface-3 px-3 py-2 text-xs shadow-xl shadow-black/40">
       <div className="mb-1 flex items-center gap-2 font-sans">
         <span className="num font-medium text-text">#{idx}</span>
-        {active && <span className="rounded bg-text/10 px-1 text-[10px]">active</span>}
+        {active && <span className="rounded bg-text/10 px-1 text-xs">active</span>}
         {b && <span className="text-faint">{fmtBinPct(b.midPct, 4)}</span>}
       </div>
       {b ? (

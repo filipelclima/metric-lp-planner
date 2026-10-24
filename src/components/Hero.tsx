@@ -1,7 +1,7 @@
 "use client";
 import { AnimatePresence, motion, useReducedMotion, type Variants } from "framer-motion";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { CartesianGrid, Customized, Line, LineChart, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   bpsToFraction,
@@ -14,7 +14,6 @@ import {
   poolDailyFees,
   poolWindowDailyFees,
   projectFees,
-  tickStep,
   type BinData,
   type Estimate,
 } from "@/lib/calc";
@@ -24,8 +23,10 @@ import { hasVolume, rangeEdgesNote, tokenNeeds } from "@/lib/rangeInputs";
 import { useApi } from "@/lib/useApi";
 import type { Period, Pool, RawBinsResponse } from "@/lib/types";
 import type { PlannerModel } from "@/lib/usePlanner";
-import { flashCls, useFlash } from "./RangeControls";
+import { useFlash } from "./RangeControls";
+import BinRuler from "./BinRuler";
 import { RiskAlert, RiskPills } from "./Risk";
+import { toast } from "./Toaster";
 import ShareMenu from "./ShareMenu";
 import { Card, CountUp, ErrorNote, InfoTip, Popover, SectionLabel, Skeleton, TokenLogo } from "./ui";
 
@@ -41,7 +42,8 @@ const rise: Variants = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0
 export default function Hero({ m, onOpenRisk, onPickPool }: { m: PlannerModel; onOpenRisk: () => void; onPickPool: () => void }) {
   const { pool, estimate, binData, range, s, bins, meta } = m;
   const reduced = useReducedMotion();
-  const flash = useFlash(`${range?.from}:${range?.to}:${s.strategy}:${s.amount}:${s.days}:${s.period}`);
+  // One glow sweep around the results card whenever the inputs that drive it change (not on first render).
+  const flash = useFlash(`${range?.from}:${range?.to}:${s.strategy}:${s.amount}:${s.days}:${s.period}`, 950);
 
   if (!pool) {
     if (s.pool && (meta.loading || !meta.error)) return <HeroSkeleton />;
@@ -95,8 +97,9 @@ export default function Hero({ m, onOpenRisk, onPickPool }: { m: PlannerModel; o
         </motion.div>
       )}
 
-      <div className={`grid gap-3 rounded-2xl xl:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)] ${flashCls(flash)}`}>
-        <motion.div variants={rise}>
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
+        <motion.div variants={rise} className="relative">
+          {flash && <span aria-hidden className="glow-sweep" />}
           <Card glow={glow} className="h-full p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -111,7 +114,7 @@ export default function Hero({ m, onOpenRisk, onPickPool }: { m: PlannerModel; o
                 </div>
               </div>
               {estimate.source === "pool" && (
-                <span className="rounded-full bg-warn/10 px-2 py-0.5 text-[11px] text-warn">pool-level (no per-bin data)</span>
+                <span className="rounded-full bg-warn/10 px-2 py-0.5 text-xs text-warn">pool-level (no per-bin data)</span>
               )}
             </div>
 
@@ -136,7 +139,7 @@ export default function Hero({ m, onOpenRisk, onPickPool }: { m: PlannerModel; o
           <Card className="h-full p-5 pb-3">
             <SectionLabel
               right={
-                <span className="flex items-center gap-3 text-[11px] text-muted">
+                <span className="flex items-center gap-3 text-xs text-muted">
                   <Legend color="var(--accent)" label="Fees" />
                   <Legend color="var(--accent)" label="Compounded" dash="dashed" />
                   {estimate.netDaily !== null && <Legend color={netLineColor(estimate.netDaily)} label="Net" dash="dotted" />}
@@ -153,7 +156,15 @@ export default function Hero({ m, onOpenRisk, onPickPool }: { m: PlannerModel; o
       <motion.div variants={rise}>
         <Card className="p-5">
           {binData && range && estimate.source === "bins" ? (
-            <BinPlanStrip pool={pool} data={binData} from={range.from} to={range.to} estimate={estimate} />
+            <BinPlanStrip
+              pool={pool}
+              data={binData}
+              from={range.from}
+              to={range.to}
+              estimate={estimate}
+              period={s.period}
+              onRange={(r) => m.set({ range: { kind: "manual", ...r } })}
+            />
           ) : (
             <p className="text-sm text-muted">No per-bin data, so there is no bin plan. Retry above to load the bins.</p>
           )}
@@ -166,7 +177,7 @@ export default function Hero({ m, onOpenRisk, onPickPool }: { m: PlannerModel; o
 function BigStat({ label, sub, tip, children }: { label: string; sub?: string; tip: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+      <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.08em] text-faint">
         {label}
         {sub && <span className="normal-case tracking-normal text-faint">({sub})</span>}
         <InfoTip>{tip}</InfoTip>
@@ -185,12 +196,12 @@ function FeeNetBar({ fees, net }: { fees: number; net: number | null }) {
     <div className="mt-5 space-y-1.5">
       <BarRow label="Fees" value={fmtUsd(fees)} width={pct(fees)} color="bg-accent" />
       {net === null ? (
-        <div className="text-[11px] text-faint">No net (trading PnL) data for this range.</div>
+        <div className="text-xs text-faint">No net (trading PnL) data for this range.</div>
       ) : (
         <BarRow label="Net" value={signedUsd(net)} width={pct(net)} color={net < 0 ? "bg-bad" : "bg-good"} />
       )}
       {diff !== null && (
-        <div className={`num pt-0.5 text-right text-[11px] ${diff < 0 ? "text-bad" : "text-good"}`}>
+        <div className={`num pt-0.5 text-right text-xs ${diff < 0 ? "text-bad" : "text-good"}`}>
           price moves {diff < 0 ? "took" : "added"} {fmtUsd(Math.abs(diff))}
         </div>
       )}
@@ -200,7 +211,7 @@ function FeeNetBar({ fees, net }: { fees: number; net: number | null }) {
 
 function BarRow({ label, value, width, color }: { label: string; value: string; width: string; color: string }) {
   return (
-    <div className="grid grid-cols-[2.5rem_1fr_6.5rem] items-center gap-2 text-[11px]">
+    <div className="grid grid-cols-[2.5rem_1fr_6.5rem] items-center gap-2 text-xs">
       <span className="text-faint">{label}</span>
       <div className="h-1.5 overflow-hidden rounded-full bg-surface-3">
         <motion.div className={`h-full rounded-full ${color}`} initial={false} animate={{ width }} transition={{ duration: 0.6, ease: "easeOut" }} />
@@ -261,13 +272,13 @@ function ProjectionChart({ estimate, days }: { estimate: Estimate; days: number 
             domain={[0, maxDays]}
             ticks={ticks}
             tickFormatter={(v) => `${v}d`}
-            tick={{ fill: "var(--faint)", fontSize: 10 }}
+            tick={{ fill: "var(--faint)", fontSize: 12 }}
             tickLine={false}
             axisLine={false}
           />
           <YAxis
             width={48}
-            tick={{ fill: "var(--faint)", fontSize: 10 }}
+            tick={{ fill: "var(--faint)", fontSize: 12 }}
             tickLine={false}
             axisLine={false}
             tickFormatter={(v) => fmtUsd(v, { compact: true }).replace(".00", "")}
@@ -323,7 +334,7 @@ function MarkerCallout(props: {
   x = Math.max(left + 2, x);
   const y = Math.max(top + 2, Math.min(my - h - 8, top + height - h - 2));
   return (
-    <g pointerEvents="none" fontSize={10}>
+    <g pointerEvents="none" fontSize={12}>
       <rect x={x} y={y} width={w} height={h} rx={6} fill="#1e232c" fillOpacity={0.95} />
       <text x={x + 9} y={y + 13} fill="var(--muted)" fontFamily="var(--font-sans)">
         Day {p.d}
@@ -346,7 +357,7 @@ function ProjTip({ active, payload }: { active?: boolean; payload?: { payload: P
   if (!active || !payload?.length) return null;
   const r = payload[0].payload;
   return (
-    <div className="num rounded-lg bg-surface-3 px-3 py-2 text-[11px] shadow-xl shadow-black/40">
+    <div className="num rounded-lg bg-surface-3 px-3 py-2 text-xs shadow-xl shadow-black/40">
       <div className="mb-1 font-sans text-muted">Day {r.d}</div>
       <div className="grid grid-cols-[auto_auto] gap-x-3">
         <span className="font-sans text-faint">Fees</span>
@@ -364,28 +375,9 @@ function ProjTip({ active, payload }: { active?: boolean; payload?: { payload: P
   );
 }
 
-/** Visual ruler of mini bins around the active bin, the plan line, Copy, and the tokens needed. */
-function BinPlanStrip({ pool, data, from, to, estimate }: { pool: Pool; data: BinData; from: number; to: number; estimate: Estimate }) {
+/** Bin plan: the interactive ruler, then the plan line + Copy and the tokens needed side by side. */
+function BinPlanStrip({ pool, data, from, to, estimate, period, onRange }: { pool: Pool; data: BinData; from: number; to: number; estimate: Estimate; period: Period; onRange: (r: { from: number; to: number }) => void }) {
   const [copied, setCopied] = useState(false);
-  const rulerRef = useRef<HTMLDivElement>(null);
-  const [rulerWidth, setRulerWidth] = useState(600);
-  useEffect(() => {
-    const el = rulerRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(([e]) => setRulerWidth(e.contentRect.width));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-  const cur = data.curBinIdx;
-  const span = Math.max(to, cur) - Math.min(from, cur) + 1;
-  const pad = span > 60 ? 1 : span > 30 ? 2 : 4;
-  const lo = Math.min(from, cur) - pad;
-  const hi = Math.max(to, cur) + pad;
-  const cells = [];
-  for (let i = lo; i <= hi; i++) cells.push(i);
-  // ~22px per label ("-10" in 9px mono plus breathing room).
-  const labelStep = tickStep(cells.length, rulerWidth / 22);
-
   const summary = planText(data, from, to).split("\n")[2].replace(/ · active bin #-?\d+$/, "");
   const line = `#${from} (${fmtPlanPct(getBin(data, from).midPct)}) → #${to} (${fmtPlanPct(getBin(data, to).midPct)}) · ${summary}`;
   const { tokens, needs } = tokenParts(pool, estimate);
@@ -394,59 +386,27 @@ function BinPlanStrip({ pool, data, from, to, estimate }: { pool: Pool; data: Bi
     try {
       await navigator.clipboard.writeText(`${pool.pair} (${pool.poolAddress})\n${planText(data, from, to)}\n${needs.text}`);
       setCopied(true);
+      toast("Plan copied ✓");
       setTimeout(() => setCopied(false), 1600);
     } catch {
-      /* clipboard unavailable */
+      toast("Couldn't copy (clipboard unavailable)", "error");
     }
   };
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-      <div className="min-w-0">
-        <SectionLabel>Bin plan</SectionLabel>
-        <div ref={rulerRef} className="relative pb-3" aria-label={`Bins ${from} to ${to}, active bin ${cur}`}>
-          <div className="flex h-7 items-end gap-[2px]">
-            {cells.map((i) => {
-              const sel = i >= from && i <= to;
-              return (
-                <div
-                  key={i}
-                  title={`#${i} · ${fmtPlanPct(getBin(data, i).midPct)}`}
-                  className={`relative min-w-[3px] flex-1 rounded-[3px] transition-colors duration-300 ${
-                    sel ? "h-7 bg-accent" : "h-5 bg-surface-3"
-                  } ${i === cur ? "ring-2 ring-text ring-offset-1 ring-offset-surface" : ""}`}
-                />
-              );
-            })}
-          </div>
-          {/* Bin indices under the selected squares and the active bin, thinned to a nice step when space is tight. */}
-          <div className="num mt-1 flex h-3.5 gap-[2px] text-[9px] leading-none">
-            {cells.map((i) => {
-              const show = i === cur || ((i >= from && i <= to) && i % labelStep === 0 && Math.abs(i - cur) >= labelStep);
-              return (
-                <div key={i} className="relative min-w-[3px] flex-1">
-                  {show && (
-                    <span className={`absolute left-1/2 -translate-x-1/2 whitespace-nowrap ${i === cur ? "font-semibold text-text" : "text-muted"}`}>
-                      {i}
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          <div className="flex gap-[2px] text-[10px] text-faint">
-            {cells.map((i) => (
-              <div key={i} className="relative min-w-[3px] flex-1">
-                {i === cur && <span className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-text">▲ active</span>}
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <code className="num rounded-lg bg-surface-2 px-3 py-1.5 text-[13px] text-text">{line}</code>
+    <div>
+      <SectionLabel>Bin plan</SectionLabel>
+      <div className="pt-1">
+        <BinRuler data={data} from={from} to={to} period={period} onRange={onRange} />
+      </div>
+      <div className="mt-6 grid gap-6 md:grid-cols-2">
+        <div className="min-w-0 rounded-xl bg-surface-2/60 p-4">
+          <div className="text-xs font-medium uppercase tracking-[0.08em] text-faint">Your plan</div>
+          <code className="num mt-2 block text-[13px] leading-relaxed text-text">{line}</code>
+          <p className="mt-2 text-xs leading-snug text-muted">{rangeEdgesNote(data, from, to)}</p>
           <button
             onClick={copy}
-            className="relative h-8 w-24 overflow-hidden rounded-lg bg-accent/15 text-xs font-medium text-accent transition hover:bg-accent/25"
+            className="relative mt-3 h-9 w-28 overflow-hidden rounded-lg bg-accent/15 text-sm font-medium text-accent transition hover:bg-accent/25"
           >
             <AnimatePresence mode="wait" initial={false}>
               <motion.span
@@ -462,33 +422,36 @@ function BinPlanStrip({ pool, data, from, to, estimate }: { pool: Pool; data: Bi
             </AnimatePresence>
           </button>
         </div>
-        <p className="mt-2 text-[11px] leading-snug text-faint">{rangeEdgesNote(data, from, to)}</p>
-      </div>
-      <div className="lg:text-right">
-        <SectionLabel>You&apos;ll need</SectionLabel>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-lg lg:justify-end">
-          {tokens.length === 0 && <span className="text-faint">—</span>}
-          {tokens.map((t, i) => (
-            <span key={t.token.symbol} className="flex items-center gap-2">
-              {i > 0 && <span className="text-faint">+</span>}
-              <TokenLogo src={t.token.logoUrl} symbol={t.token.symbol} size={22} />
-              {t.need.amount !== null ? (
-                <>
-                  <span className="num">{t.need.amount}</span>
-                  <span className="text-sm text-muted">{t.token.symbol}</span>
-                  <span className="num text-sm text-faint">≈ {t.need.usd}</span>
-                </>
-              ) : (
-                <>
-                  <span className="num">{t.need.usd}</span>
-                  <span className="text-sm text-muted">of {t.token.symbol}</span>
-                  <span className="text-xs text-warn">price n/a</span>
-                </>
-              )}
-            </span>
-          ))}
+        <div className="min-w-0 rounded-xl bg-surface-2/60 p-4">
+          <div className="text-xs font-medium uppercase tracking-[0.08em] text-faint">You&apos;ll need</div>
+          <div className="mt-2 space-y-2">
+            {tokens.length === 0 && <span className="text-faint">—</span>}
+            {tokens.map((t) => (
+              <div key={t.token.symbol} className="flex items-center gap-2.5">
+                <TokenLogo src={t.token.logoUrl} symbol={t.token.symbol} size={24} />
+                {t.need.amount !== null ? (
+                  <>
+                    <span className="num text-lg text-text">{t.need.amount}</span>
+                    <span className="text-sm text-muted">{t.token.symbol}</span>
+                    <span className="num ml-auto text-sm text-muted">≈ {t.need.usd}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="num text-lg text-text">{t.need.usd}</span>
+                    <span className="text-sm text-muted">of {t.token.symbol}</span>
+                    <span className="ml-auto rounded bg-warn/10 px-1.5 py-0.5 text-xs text-warn">price n/a</span>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+          {tokens.length > 0 && (
+            <div className="num mt-3 flex justify-between border-t border-white/5 pt-2 text-sm">
+              <span className="font-sans text-muted">Total</span>
+              <span className="text-text">{needs.total}</span>
+            </div>
+          )}
         </div>
-        {tokens.length > 0 && <div className="num mt-1 text-xs text-muted lg:text-right">total {needs.total}</div>}
       </div>
     </div>
   );
@@ -516,7 +479,7 @@ function Breakdown({ estimate, days, pool, binData, period }: { estimate: Estima
         <Mini label="Pool 7d fee APR" value={fmtApr(bpsToFraction(pool.aprBps7d))} sub={poolFeesSub ?? undefined} />
       </div>
       <table className="num w-full text-xs">
-        <thead className="text-left text-[10px] uppercase tracking-[0.08em] text-faint">
+        <thead className="text-left text-xs uppercase tracking-[0.08em] text-faint">
           <tr>
             <th className="py-1 font-sans font-medium">Days</th>
             <th className="py-1 text-right font-sans font-medium">Fees</th>
@@ -529,7 +492,7 @@ function Breakdown({ estimate, days, pool, binData, period }: { estimate: Estima
             const p = projectFees(estimate.dailyFees, estimate.deposit, d);
             const n = estimate.netDaily === null ? null : estimate.netDaily * d;
             return (
-              <tr key={d} className={`border-t border-line/60 ${d === days ? "text-text" : "text-muted"}`}>
+              <tr key={d} className={`border-t border-white/[0.05] ${d === days ? "text-text" : "text-muted"}`}>
                 <td className="py-1.5">{d}</td>
                 <td className="py-1.5 text-right">{fmtUsd(p.simple)}</td>
                 <td className="py-1.5 text-right">{fmtUsd(p.compounded)}</td>
@@ -539,7 +502,7 @@ function Breakdown({ estimate, days, pool, binData, period }: { estimate: Estima
           })}
         </tbody>
       </table>
-      <p className="text-[11px] leading-relaxed text-faint">
+      <p className="text-xs leading-relaxed text-faint">
         Compounded: r = fees/day ÷ deposit, value = D(1+r)^days − D. Net replays each bin&apos;s historical trading PnL (fees + price moves), not
         compounded. {estimate.netSkippedBins > 0 && `${estimate.netSkippedBins} bin(s) without net data are counted as 0. `}
         {NET_NOTE}
@@ -551,9 +514,9 @@ function Breakdown({ estimate, days, pool, binData, period }: { estimate: Estima
 function Mini({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="rounded-lg bg-surface-2 px-3 py-2">
-      <div className="text-[10px] uppercase tracking-[0.08em] text-faint">{label}</div>
+      <div className="text-xs uppercase tracking-[0.08em] text-faint">{label}</div>
       <div className="num mt-0.5 text-base">{value}</div>
-      {sub && <div className="mt-0.5 text-[10px] text-faint">{sub}</div>}
+      {sub && <div className="mt-0.5 text-xs text-faint">{sub}</div>}
     </div>
   );
 }
@@ -561,12 +524,13 @@ function Mini({ label, value, sub }: { label: string; value: string; sub?: strin
 function HeroSkeleton({ pool, onOpenRisk }: { pool?: Pool; onOpenRisk?: () => void }) {
   return (
     <div className="space-y-3" aria-busy="true" aria-label="Loading estimate">
-      <div className="flex items-center justify-between">
-        {pool && onOpenRisk ? <RiskPills pool={pool} onOpen={onOpenRisk} /> : <Skeleton className="h-6 w-72 rounded-full" />}
-        <Skeleton className="h-7 w-40" />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {pool && onOpenRisk ? <RiskPills pool={pool} onOpen={onOpenRisk} /> : <Skeleton className="h-[26px] w-72 rounded-full" />}
+        <Skeleton className="h-[30px] w-72 max-w-full" />
       </div>
+      {/* Heights match the loaded hero (results 272px on xl, stacked on small screens; Bin plan card) so nothing shifts. */}
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
-        <Card className="space-y-4 p-5">
+        <Card className="h-[245px] space-y-4 p-5 xl:h-[272px]">
           <Skeleton className="h-12 w-52" />
           <Skeleton className="h-4 w-40" />
           <div className="grid grid-cols-2 gap-4">
@@ -575,13 +539,17 @@ function HeroSkeleton({ pool, onOpenRisk }: { pool?: Pool; onOpenRisk?: () => vo
           </div>
           <Skeleton className="h-8" />
         </Card>
-        <Card className="p-5">
-          <Skeleton className="h-[188px]" />
+        <Card className="h-[245px] p-5 xl:h-[272px]">
+          <Skeleton className="h-full" />
         </Card>
       </div>
-      <Card className="space-y-3 p-5">
-        <Skeleton className="h-7" />
-        <Skeleton className="h-8 w-2/3" />
+      <Card className="h-[624px] space-y-4 p-5 md:h-[385px]">
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-14" />
+        <div className="grid gap-6 md:grid-cols-2">
+          <Skeleton className="h-36" />
+          <Skeleton className="h-36" />
+        </div>
       </Card>
     </div>
   );

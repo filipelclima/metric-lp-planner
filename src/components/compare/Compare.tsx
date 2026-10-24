@@ -254,7 +254,7 @@ export default function Compare() {
 
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
             <Card className="p-5">
-              <div className="mb-1 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+              <div className="mb-1 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.08em] text-faint">
                 Ranges on {basePool?.pair ?? "the pool"}
                 <InfoTip side="bottom">Pool liquidity per bin with each scenario&apos;s range. Scenarios on a different pool aren&apos;t drawn here.</InfoTip>
               </div>
@@ -265,7 +265,7 @@ export default function Compare() {
               )}
             </Card>
             <Card className="p-5">
-              <div className="mb-1 text-[11px] font-medium uppercase tracking-[0.08em] text-faint">Fee APR vs net APR</div>
+              <div className="mb-1 text-xs font-medium uppercase tracking-[0.08em] text-faint">Fee APR vs net APR</div>
               {metrics.some(Boolean) ? (
                 <AprBars
                   items={resolved.flatMap((r) => (r.metrics && !r.noTrades ? [{ label: r.label, feeApr: r.metrics.feeApr, netApr: r.metrics.netApr, color: r.color }] : []))}
@@ -281,7 +281,7 @@ export default function Compare() {
           <CompareTable resolved={resolved} best={best} verdictList={verdictList} days={s.days} hovered={hovered} onHover={setHovered} noTrades={noTradesCtx} />
           <MobileTabs resolved={resolved} best={best} verdictList={verdictList} days={s.days} noTrades={noTradesCtx} tab={Math.min(tab, resolved.length - 1)} setTab={setTab} />
 
-          <p className="text-center text-[11px] text-faint">
+          <p className="text-center text-xs text-faint">
             Estimates from the {s.period} window&apos;s per-bin fees and liquidity; net APR is historical (fees + price moves). Fees ≠ profit.
           </p>
         </>
@@ -418,7 +418,7 @@ function rows(days: number): Row[] {
       render: (m) => (
         <span>
           #{m.from} → #{m.to}
-          <span className="block font-sans text-[11px] text-faint">
+          <span className="block font-sans text-xs text-faint">
             {fmtWidth(m.widthPct * 1e4)} wide · {m.bins} bin{m.bins === 1 ? "" : "s"}
           </span>
         </span>
@@ -446,7 +446,7 @@ function rows(days: number): Row[] {
       render: (m) => (
         <span>
           {fmtUsd(m.feesSimple)}
-          <span className="block font-sans text-[11px] text-faint">compounded {fmtUsd(m.feesCompounded)}</span>
+          <span className="block font-sans text-xs text-faint">compounded {fmtUsd(m.feesCompounded)}</span>
         </span>
       ),
     },
@@ -474,7 +474,7 @@ function rows(days: number): Row[] {
       label: "Idle bins",
       tip: "Bins in the range that traded ~0 volume (under 0.1% of the window's total).",
       best: "idle",
-      render: (m) => (m.idle.length === 0 ? "0" : <span className="text-warn">{m.idle.length}<span className="ml-1 font-sans text-[11px] text-faint">({compactRuns(m.idle)})</span></span>),
+      render: (m) => (m.idle.length === 0 ? "0" : <span className="text-warn">{m.idle.length}<span className="ml-1 font-sans text-xs text-faint">({compactRuns(m.idle)})</span></span>),
     },
   ];
 }
@@ -514,8 +514,10 @@ function CompareTable({
     <Card className={`hidden overflow-x-auto md:block ${flashCls(flash)}`}>
       <table className="w-full min-w-[720px] table-fixed text-sm">
         <thead>
-          <tr className="border-b border-line/60">
-            <th className="w-48 px-4 py-3" />
+          <tr className="border-b border-white/[0.05]">
+            <th className="w-48 px-4 py-3">
+              <span className="sr-only">Metric</span>
+            </th>
             {resolved.map((r, i) => (
               <th
                 key={r.label}
@@ -525,7 +527,7 @@ function CompareTable({
                 style={{ boxShadow: `inset 0 3px 0 ${r.color}` }}
               >
                 <span className="flex items-center gap-2">
-                  <span className="flex h-5 w-5 items-center justify-center rounded text-[11px] font-bold text-bg" style={{ background: r.color }}>
+                  <span className="flex h-5 w-5 items-center justify-center rounded text-xs font-bold text-bg" style={{ background: r.color }}>
                     {r.label}
                   </span>
                   <span className="font-medium">{rowTitle(r)}</span>
@@ -542,7 +544,7 @@ function CompareTable({
         </thead>
         <tbody>
           {tableRows.map((row, ri) => (
-            <tr key={row.key} className="border-b border-line/40">
+            <tr key={row.key} className="border-b border-white/[0.05]">
               <td className="px-4 py-2.5 text-[12px] text-muted">
                 <span className="flex items-center gap-1.5">
                   {row.label}
@@ -589,7 +591,7 @@ function CompareTable({
           </tr>
         </tbody>
       </table>
-      <p className="px-4 py-2 text-[11px] text-faint">Highlighted: the best value in each row.</p>
+      <p className="px-4 py-2 text-xs text-faint">Highlighted: the best value in each row.</p>
     </Card>
   );
 }
@@ -667,10 +669,10 @@ function MobileTabs({
                     );
                   })}
                 </dl>
-                <p className="mt-3 border-t border-line/60 pt-3 text-[13px]">{verdictList[tab] ?? "—"}</p>
+                <p className="mt-3 border-t border-white/[0.05] pt-3 text-[13px]">{verdictList[tab] ?? "—"}</p>
               </>
             )}
-            {resolved.length > 1 && <p className="mt-2 text-center text-[10px] text-faint">Swipe or tap the tabs to switch scenarios</p>}
+            {resolved.length > 1 && <p className="mt-2 text-center text-xs text-faint">Swipe or tap the tabs to switch scenarios</p>}
           </Card>
         </motion.div>
       </AnimatePresence>
@@ -772,7 +774,7 @@ function NoTradesCard({ r, index, ctx }: { r: Resolved; index: number; ctx: NoTr
 
 /** Small note on a column: a manual duplicate ("Same range as B") or why a preset was widened. */
 function RangeNote({ range }: { range: ResolvedRange | null }) {
-  if (range?.sameAs != null) return <span className="rounded bg-warn/10 px-1.5 py-0.5 text-[11px] font-normal text-warn">Same range as {SCENARIO_LABELS[range.sameAs]}</span>;
+  if (range?.sameAs != null) return <span className="rounded bg-warn/10 px-1.5 py-0.5 text-xs font-normal text-warn">Same range as {SCENARIO_LABELS[range.sameAs]}</span>;
   if (range && range.widened > 0 && range.widenedFrom !== null)
     return (
       <InfoTip>

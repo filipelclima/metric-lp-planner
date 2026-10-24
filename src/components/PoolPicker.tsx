@@ -92,7 +92,7 @@ export default function PoolPicker({ list, selected, onSelect, hasSelection, pic
               onChange={(chain) => setPrefs({ ...prefs, chain })}
               options={[{ value: "all" as const, label: "All" }, ...Object.entries(CHAINS).map(([id, c]) => ({ value: Number(id), label: c.short, title: c.name }))]}
             />
-            <span className="flex items-center gap-1.5 text-[11px] text-faint">
+            <span className="flex items-center gap-1.5 text-xs text-faint">
               APR
               <Segmented<AprPeriod>
                 size="sm"
@@ -104,7 +104,7 @@ export default function PoolPicker({ list, selected, onSelect, hasSelection, pic
                 ]}
               />
             </span>
-            <span className="flex items-center gap-1.5 text-[11px] text-faint">
+            <span className="flex items-center gap-1.5 text-xs text-faint">
               TVL
               <Segmented<TvlFloor>
                 size="sm"
@@ -113,17 +113,17 @@ export default function PoolPicker({ list, selected, onSelect, hasSelection, pic
                 options={TVL_FLOORS.map((v) => ({ value: v, label: TVL_LABEL[v] }))}
               />
             </span>
-            <label className="flex items-center gap-1.5 text-[11px] text-muted" title="Pools with no trades in the last 7 days and under $10k TVL are hidden by default.">
+            <label className="flex items-center gap-1.5 text-xs text-muted" title="Pools with no trades in the last 7 days and under $10k TVL are hidden by default.">
               <input type="checkbox" checked={prefs.showInactive} onChange={(e) => setPrefs({ ...prefs, showInactive: e.target.checked })} className="accent-[var(--accent)]" />
               Show inactive pools
             </label>
-            <label className="flex items-center gap-1.5 text-[11px] text-muted" title="Private pools only accept deposits from allowlisted wallets.">
+            <label className="flex items-center gap-1.5 text-xs text-muted" title="Private pools only accept deposits from allowlisted wallets.">
               <input type="checkbox" checked={prefs.hidePrivate} onChange={(e) => setPrefs({ ...prefs, hidePrivate: e.target.checked })} className="accent-[var(--accent)]" />
               Hide private pools
             </label>
           </div>
           {!list.loading && total > 0 && (
-            <p className="mt-2 text-[11px] text-faint">
+            <p className="mt-2 text-xs text-faint">
               Showing {pools.length} of {total} pools
               {pools.length < total && (prefs.minTvl > 0 || !prefs.showInactive || prefs.hidePrivate) && (
                 <>
@@ -147,7 +147,7 @@ export default function PoolPicker({ list, selected, onSelect, hasSelection, pic
             {!list.loading && !list.error && pools.length === 0 && <p className="py-6 text-center text-sm text-muted">No pools match.</p>}
             {pools.length > 0 && (
               <table className="w-full table-fixed text-sm">
-                <thead className="sticky top-0 bg-surface-3 text-left text-[11px] uppercase tracking-wider text-muted">
+                <thead className="sticky top-0 bg-surface-3 text-left text-xs uppercase tracking-wider text-muted">
                   <tr>
                     <SortTh label="Pair" col="pair" prefs={prefs} onSort={(c) => setPrefs(toggleSort(prefs, c))} />
                     <SortTh label="Chain" col="chain" prefs={prefs} onSort={(c) => setPrefs(toggleSort(prefs, c))} className="hidden w-14 sm:table-cell" />
@@ -164,7 +164,7 @@ export default function PoolPicker({ list, selected, onSelect, hasSelection, pic
                         onSelect(p);
                         setOpen(false);
                       }}
-                      className={`cursor-pointer border-t border-line/50 hover:bg-surface-2 ${
+                      className={`cursor-pointer border-t border-white/[0.05] hover:bg-surface-2 ${
                         selected?.poolAddress.toLowerCase() === p.poolAddress.toLowerCase() && selected.chainId === p.chainId ? "bg-accent/5" : ""
                       }`}
                     >
@@ -215,7 +215,7 @@ function SortTh({ label, col, prefs, onSort, className = "", right = false }: { 
         title={`Sort by ${label}`}
       >
         {label}
-        <span className={`text-[9px] ${active ? "text-accent" : "opacity-0"}`}>{active && prefs.dir === "asc" ? "▲" : "▼"}</span>
+        <span className={`text-xs ${active ? "text-accent" : "opacity-0"}`}>{active && prefs.dir === "asc" ? "▲" : "▼"}</span>
       </button>
     </th>
   );

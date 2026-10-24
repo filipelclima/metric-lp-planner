@@ -41,7 +41,7 @@ export default function BinDetails({ pool, data, estimate, hovered, onHover }: P
       }}
     >
       <table className="num w-full min-w-[760px] text-xs">
-        <thead className="sticky top-0 z-10 bg-surface text-left font-sans text-[10px] uppercase tracking-[0.08em] text-faint">
+        <thead className="sticky top-0 z-10 bg-surface text-left font-sans text-xs uppercase tracking-[0.08em] text-faint">
           <tr>
             <th className={th}>Bin</th>
             <th className={th}>Low</th>
@@ -77,7 +77,7 @@ export default function BinDetails({ pool, data, estimate, hovered, onHover }: P
               >
                 <td className="px-2 py-1.5">
                   #{p.bin.idx}
-                  {active && <span className="ml-1.5 rounded bg-text/10 px-1 font-sans text-[10px] text-text">active</span>}
+                  {active && <span className="ml-1.5 rounded bg-text/10 px-1 font-sans text-xs text-text">active</span>}
                 </td>
                 <td className="px-2 py-1.5 text-faint">{fmtBinPct(p.bin.lowPct)}</td>
                 <td className="px-2 py-1.5">{fmtBinPct(p.bin.midPct)}</td>

@@ -1,3 +1,4 @@
+import { curatorName } from "@/lib/intent";
 import { fmtUsd } from "@/lib/calc";
 import { chainName } from "@/lib/normalize";
 import type { Pool } from "@/lib/types";
@@ -20,8 +21,8 @@ export function PoolStats({ pool }: { pool: Pool }) {
         <div className="flex items-center justify-between gap-3">
           <dt className="text-faint">Curator</dt>
           <dd className="truncate text-right">
-            {pool.adminUsername ?? <span className="text-muted">Unnamed</span>}
-            {pool.verifiedAdmin ? <span className="ml-1.5 text-good">✓</span> : <span className="ml-1.5 text-[11px] text-warn">unverified</span>}
+            {pool.adminUsername ?? <span className="num text-muted" title={pool.admin ?? undefined}>{curatorName(pool)}</span>}
+            {pool.verifiedAdmin ? <span className="ml-1.5 text-good">✓</span> : <span className="ml-1.5 text-xs text-warn">unverified</span>}
           </dd>
         </div>
         <div className="flex items-center justify-between gap-3">
@@ -36,7 +37,7 @@ export function PoolStats({ pool }: { pool: Pool }) {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-[10px] uppercase tracking-[0.08em] text-faint">{label}</dt>
+      <dt className="text-xs uppercase tracking-[0.08em] text-faint">{label}</dt>
       <dd className="num mt-0.5 text-[15px]">{value}</dd>
     </div>
   );
@@ -59,7 +60,7 @@ export function HowItWorks({ pool }: { pool: Pool | null }) {
       <ol className="space-y-2">
         {steps.map((t, i) => (
           <li key={t} className="flex items-center gap-3 text-[13px] text-muted">
-            <span className="num flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-2 text-[11px] text-text">{i + 1}</span>
+            <span className="num flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-2 text-xs text-text">{i + 1}</span>
             {t}
           </li>
         ))}

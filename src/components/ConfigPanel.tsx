@@ -75,7 +75,7 @@ export default function ConfigPanel({ m }: { m: PlannerModel }) {
           onToggle={() => setAdvanced((a) => !a)}
           right={
             !advanced && (
-              <span className="text-[11px] text-muted">
+              <span className="text-xs text-muted">
                 {STRATEGY_LABEL[s.strategy]} · {s.period}
               </span>
             )
@@ -93,7 +93,7 @@ export default function ConfigPanel({ m }: { m: PlannerModel }) {
                   { value: "fee", label: "Fee-weighted" },
                 ]}
               />
-              <p className="mt-1.5 text-[11px] leading-snug text-faint">
+              <p className="mt-1.5 text-xs leading-snug text-faint">
                 How your deposit is split across the selected bins. Uniform = equal per bin · Curve = more near the current price · Fee-weighted = more
                 where fees were highest.
               </p>
@@ -109,7 +109,7 @@ export default function ConfigPanel({ m }: { m: PlannerModel }) {
                   { value: "30d", label: "30d" },
                 ]}
               />
-              <p className="mt-1.5 text-[11px] leading-snug text-faint">
+              <p className="mt-1.5 text-xs leading-snug text-faint">
                 Which past data the estimate uses. 24h = most recent but noisy · 7d = balanced (default) · 30d = steadier. &lsquo;window&rsquo; = days of
                 data this pool actually has.
               </p>

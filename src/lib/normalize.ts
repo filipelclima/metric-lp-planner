@@ -37,6 +37,7 @@ export function normalizePool(o: RawPool, chainId: number): Pool {
     isPrivate: o.depositWhitelistingEnabled === true,
     verifiedAdmin: o.verifiedAdmin === true,
     adminUsername: o.adminUsername ?? null,
+    admin: o.admin ?? null,
     priceProviderStatus: PROVIDER_STATUSES.includes(o.priceProviderStatus) ? o.priceProviderStatus : "unknown",
     priceProviderCooldown: safeInt(o.priceProviderCooldownSecs),
     pauseLevel: o.pauseLevel ?? 0,

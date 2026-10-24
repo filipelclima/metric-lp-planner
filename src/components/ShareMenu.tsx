@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { toast } from "./Toaster";
 import { projectFees } from "@/lib/calc";
 import { formatSnapshot, freezeSnapshot, makeShareId, ogImageQuery, shareText, snapshotParams, today, type Snapshot } from "@/lib/share";
 import type { PlannerModel } from "@/lib/usePlanner";
@@ -70,8 +71,10 @@ export function ShareMenu({ build }: { build: () => ShareLinks }) {
     try {
       await navigator.clipboard.writeText(share.link);
       flash("Link copied ✓");
+      toast("Link copied ✓");
     } catch {
       flash("Couldn't copy");
+      toast("Couldn't copy the link", "error");
     }
   };
 
@@ -88,8 +91,10 @@ export function ShareMenu({ build }: { build: () => ShareLinks }) {
       a.click();
       URL.revokeObjectURL(a.href);
       flash("Downloaded ✓");
+      toast("Image downloaded ✓");
     } catch {
       flash("Image failed");
+      toast("Couldn't render the share image", "error");
     }
   };
 
@@ -107,7 +112,7 @@ export function ShareMenu({ build }: { build: () => ShareLinks }) {
           // eslint-disable-next-line @next/next/no-img-element
           <img src={share.image} alt="Share card preview" className="mb-1 aspect-[1200/630] w-full rounded-lg bg-surface-2 object-cover" />
         )}
-        {share?.asOf && <p className="px-3 pb-1 text-[11px] text-faint">Snapshot of these numbers as of {share.asOf}</p>}
+        {share?.asOf && <p className="px-3 pb-1 text-xs text-faint">Snapshot of these numbers as of {share.asOf}</p>}
         <button className={item} onClick={copyLink}>
           Copy link <span className="text-faint">⌘C</span>
         </button>

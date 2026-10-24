@@ -18,7 +18,6 @@ export function RiskPills({ pool, onOpen }: { pool: Pool; onOpen: () => void }) 
     <button
       type="button"
       onClick={onOpen}
-      aria-label="Open risk details"
       className={`group inline-flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-full px-3 py-1 text-xs transition ${
         isHighRisk(pool) ? "bg-bad/10 text-bad hover:bg-bad/15" : "bg-surface-2 text-muted hover:bg-surface-3 hover:text-text"
       }`}
@@ -42,7 +41,8 @@ export function RiskPills({ pool, onOpen }: { pool: Pool; onOpen: () => void }) 
           </span>
         </>
       )}
-      <span className="text-faint transition group-hover:translate-x-0.5">›</span>
+      <span aria-hidden className="text-faint transition group-hover:translate-x-0.5">›</span>
+      <span className="sr-only">: open risk details</span>
     </button>
   );
 }
@@ -192,9 +192,9 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 function Stat({ label, value, tone, sub }: { label: React.ReactNode; value: string; tone: string; sub: string }) {
   return (
     <div className="rounded-xl bg-surface-2 px-4 py-3">
-      <div className="flex items-center gap-1 text-[11px] uppercase tracking-[0.08em] text-faint">{label}</div>
+      <div className="flex items-center gap-1 text-xs uppercase tracking-[0.08em] text-faint">{label}</div>
       <div className={`num mt-1 text-2xl font-medium ${tone}`}>{value}</div>
-      <div className="mt-0.5 text-[11px] text-faint">{sub}</div>
+      <div className="mt-0.5 text-xs text-faint">{sub}</div>
     </div>
   );
 }

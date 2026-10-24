@@ -1,5 +1,5 @@
 "use client";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fmtUsd, projectFees, type BinData } from "@/lib/calc";
 import {
@@ -14,11 +14,12 @@ import {
   type ParsedIntent,
   type RangeWord,
 } from "@/lib/intent";
+import { typewriterText } from "@/lib/landing";
 import { activePreset, tokenNeeds, widerRange } from "@/lib/rangeInputs";
 import { CHAINS, type Pool } from "@/lib/types";
 import type { PlannerModel } from "@/lib/usePlanner";
 import type { PlannerState } from "@/lib/urlState";
-import { InfoTip, TierBadge, inputCls } from "./ui";
+import { Callout, InfoTip, TierBadge, inputCls } from "./ui";
 
 type Outcome =
   | { kind: "applied"; prev: PlannerState; notes: string[]; word?: RangeWord; widened?: boolean }
@@ -38,7 +39,8 @@ const binWidthPct = (d: BinData) => d.defaultLengthE6 / 1e4;
  * "Describe your plan": free text → planner form, with a rule-based parser (lib/intent.ts). No AI, no API
  * keys. It only fills the form; every number in the summary comes from the planner's own estimate.
  */
-export default function DescribePlan({ m }: { m: PlannerModel }) {
+export default function DescribePlan({ m, variant = "compact" }: { m: PlannerModel; variant?: "hero" | "compact" }) {
+  const hero = variant === "hero";
   const [text, setText] = useState("");
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
@@ -170,10 +172,35 @@ export default function DescribePlan({ m }: { m: PlannerModel }) {
     return [`Deposit $200 on ${a} with a medium range for 60 days`, `1.5k on ${b}, wide range, 3 months`, `Depositar 500 dólares en ${c}, rango estrecho, 30 días`];
   }, [pools]);
 
+  const howTo = (
+    <InfoTip side="bottom">
+      <span className="block font-medium text-text">How to write it</span>
+      <span className="mt-1 block">
+        Amount: $200, 200 dollars, 1.5k, 2,000 · Pool: AI/USDG, AI-USDG, &quot;on SKHYB&quot; · Chain: on BNB / Ethereum / Robinhood · Range: narrow (80%), medium (90%), wide
+        (95%), very wide / max (Wider), &quot;#-3 to #2&quot;, &quot;±0.1%&quot; · Duration: 60 days, 2 months, a quarter, 1 week, a year · Distribution: even, curve, by
+        fees · Data: &quot;using 24h data&quot;, &quot;based on last week&quot;.
+      </span>
+      <span className="mt-1 block">Also in Portuguese, Spanish, French, Turkish, Chinese, Vietnamese and Russian. Rule-based (no AI): it only fills the form.</span>
+    </InfoTip>
+  );
+  const retry = () => {
+    retryText.current = text.trim() || null;
+    setOutcome({ kind: "waiting" });
+    m.list.retry();
+  };
+
   return (
-    <div className="rounded-2xl bg-surface p-4 sm:p-5">
+    <div className={hero ? "" : "rounded-2xl bg-surface p-4 sm:p-6"}>
+      {hero && (
+        <div className="mb-6 text-center">
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-5xl">Plan your Metric LP in plain words</h1>
+          <p className="mx-auto mt-3 max-w-xl text-base text-muted">
+            Type what you want to do; Binwise fills the planner and estimates fees, net APR and the exact bins. Rule-based, no AI, nothing leaves your browser.
+          </p>
+        </div>
+      )}
       <form
-        className="flex flex-col gap-2 sm:flex-row"
+        className={`flex flex-col gap-2 sm:flex-row ${hero ? "rounded-2xl bg-surface p-2 shadow-[0_0_0_1px_rgba(45,212,191,0.18),0_24px_60px_-24px_rgba(45,212,191,0.35)]" : ""}`}
         onSubmit={(e) => {
           e.preventDefault();
           void submit();
@@ -182,29 +209,20 @@ export default function DescribePlan({ m }: { m: PlannerModel }) {
         <label className="sr-only" htmlFor="describe-plan">
           Describe your plan
         </label>
-        <input
-          id="describe-plan"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="e.g. Deposit $200 on AI/USDG with a medium range for 60 days"
-          className={`${inputCls.replace(" num", "")} flex-1 py-2.5`}
-          autoComplete="off"
-        />
+        <PlanInput value={text} onChange={setText} hero={hero} examples={examples} />
         <div className="flex items-center gap-2">
-          <button type="submit" disabled={!text.trim()} className="rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-bg transition hover:brightness-110 disabled:opacity-40">
+          <button
+            type="submit"
+            disabled={!text.trim()}
+            className={`flex-1 rounded-xl bg-accent font-semibold text-bg transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-surface-3 disabled:text-muted sm:flex-none ${hero ? "px-6 py-3.5 text-base" : "px-4 py-2.5 text-sm"}`}
+          >
             Fill planner
           </button>
-          <InfoTip side="bottom">
-            <span className="block font-medium text-text">How to write it</span>
-            <span className="mt-1 block">
-              Amount: $200, 200 dollars, 1.5k, 2,000 · Pool: AI/USDG, AI-USDG, &quot;on SKHYB&quot; · Chain: on BNB / Ethereum / Robinhood · Range: narrow (80%), medium (90%), wide (95%), very wide / max (Wider), &quot;#-3 to #2&quot;, &quot;±0.1%&quot; · Duration: 60 days, 2 months, a quarter, 1 week, a year · Distribution: even, curve, by fees · Data: &quot;using 24h data&quot;, &quot;based on last week&quot;.
-            </span>
-            <span className="mt-1 block">Also in Portuguese, Spanish, French, Turkish, Chinese, Vietnamese and Russian. Rule-based (no AI): it only fills the form.</span>
-          </InfoTip>
+          {howTo}
         </div>
       </form>
 
-      <div className="mt-2 flex flex-wrap gap-1.5">
+      <div className={`mt-3 flex-wrap gap-2 ${hero ? "flex justify-center" : "hidden sm:flex"}`}>
         {examples.map((ex) => (
           <button
             key={ex}
@@ -213,7 +231,7 @@ export default function DescribePlan({ m }: { m: PlannerModel }) {
               setText(ex);
               void submit(ex);
             }}
-            className="max-w-full truncate rounded-full bg-surface-2 px-2.5 py-1 text-[11px] text-muted transition hover:bg-surface-3 hover:text-text"
+            className="max-w-full truncate rounded-full bg-surface-2 px-3 py-1.5 text-xs text-muted transition hover:bg-surface-3 hover:text-text"
           >
             {ex}
           </button>
@@ -222,39 +240,40 @@ export default function DescribePlan({ m }: { m: PlannerModel }) {
 
       <AnimatePresence initial={false}>
         {outcome && (
-          <motion.div key={outcome.kind} initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mt-3 text-sm" role="status">
+          <motion.div
+            key={outcome.kind}
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className={`mt-4 text-sm ${hero ? "mx-auto max-w-3xl" : ""}`}
+            role="status"
+          >
             {outcome.kind === "applied" && <Summary m={m} notes={outcome.notes} word={outcome.word} widened={!!outcome.widened} pending={!!pending} onUndo={undo} />}
-            {outcome.kind === "choose" && (
-              <Choices title={ambiguityTitle(outcome.options)} pools={outcome.options} onPick={(p) => apply(outcome.intent, p)} />
-            )}
-            {outcome.kind === "notFound" && (
-              outcome.suggestions.length ? (
+            {outcome.kind === "choose" && <Choices title={ambiguityTitle(outcome.options)} pools={outcome.options} onPick={(p) => apply(outcome.intent, p)} />}
+            {outcome.kind === "notFound" &&
+              (outcome.suggestions.length ? (
                 <Choices
                   title={outcome.query ? `Couldn't find ${outcome.query}. Did you mean:` : "Which pool? Name a pair, or pick one:"}
                   pools={outcome.suggestions}
                   onPick={(p) => apply(outcome.intent, p)}
                 />
               ) : (
-                <p className="text-warn">{outcome.query ? `Couldn't find ${outcome.query} on Metric.` : "Name a pool, e.g. AI/USDG."}</p>
-              )
-            )}
-            {outcome.kind === "waiting" && <p className="text-muted">Loading Metric&apos;s pool list…</p>}
+                <Callout>{outcome.query ? `Couldn't find ${outcome.query} on Metric.` : "Name a pool, e.g. AI/USDG."}</Callout>
+              ))}
+            {outcome.kind === "waiting" && <Callout tone="info">Loading Metric&apos;s pool list…</Callout>}
             {outcome.kind === "listError" && (
-              <p className="text-warn">
+              <Callout tone="bad">
                 Couldn&apos;t load Metric&apos;s pool list ({outcome.message}).{" "}
-                <button type="button" className="underline" onClick={() => {
-                    retryText.current = text.trim() || null;
-                    setOutcome({ kind: "waiting" });
-                    m.list.retry();
-                  }}>
+                <button type="button" className="font-medium underline" onClick={retry}>
                   Retry
                 </button>
-              </p>
+              </Callout>
             )}
             {outcome.kind === "nothing" && (
-              <p className="text-warn">
-                Couldn&apos;t understand that{outcome.unknown.length ? ` (didn't recognise: ${outcome.unknown.slice(0, 6).join(", ")})` : ""}. Try one of the examples above.
-              </p>
+              <Callout>
+                Couldn&apos;t understand that{outcome.unknown.length ? ` (didn't recognise: ${outcome.unknown.slice(0, 6).join(", ")})` : ""}. Try one of the examples
+                above.
+              </Callout>
             )}
           </motion.div>
         )}
@@ -263,10 +282,44 @@ export default function DescribePlan({ m }: { m: PlannerModel }) {
   );
 }
 
+const STATIC_PLACEHOLDER = "e.g. Deposit $200 on AI/USDG with a medium range for 60 days";
+
+/**
+ * The text box. On the landing hero its placeholder types out example sentences in a loop; it pauses while
+ * focused or filled, and stays static with reduced motion. Its own component so the ticking doesn't re-render the form.
+ */
+function PlanInput({ value, onChange, hero, examples }: { value: string; onChange: (v: string) => void; hero: boolean; examples: string[] }) {
+  const reduced = useReducedMotion();
+  const [focused, setFocused] = useState(false);
+  const [placeholder, setPlaceholder] = useState(STATIC_PLACEHOLDER);
+  const animate = hero && !reduced && !focused && !value;
+  useEffect(() => {
+    if (!animate) {
+      setPlaceholder(STATIC_PLACEHOLDER);
+      return;
+    }
+    const start = performance.now();
+    const id = setInterval(() => setPlaceholder(typewriterText(examples, performance.now() - start) || "\u00a0"), 50);
+    return () => clearInterval(id);
+  }, [animate, examples]);
+  return (
+    <input
+      id="describe-plan"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      placeholder={placeholder}
+      className={`${inputCls.replace(" num", "")} flex-1 ${hero ? "bg-transparent px-4 py-3.5 text-lg" : "py-2.5"}`}
+      autoComplete="off"
+    />
+  );
+}
+
 function Choices({ title, pools, onPick }: { title: string; pools: Pool[]; onPick: (p: Pool) => void }) {
   return (
     <div>
-      <p className="text-warn">{title}</p>
+      <Callout tone="info">{title}</Callout>
       <div className="mt-2 flex flex-wrap gap-1.5">
         {pools.map((p) => (
           <button
@@ -327,9 +380,9 @@ function Summary({
           Undo
         </button>
       </div>
-      {warning && <p className="mt-1 text-[12px] font-medium text-warn">{warning}</p>}
+      {warning && <Callout className="mt-2">{warning.replace(/^⚠\s*/, "")}</Callout>}
       {notes.length > 0 && (
-        <ul className="mt-1 space-y-0.5 text-[12px] text-muted">
+        <ul className="mt-2 space-y-0.5 text-xs text-muted">
           {notes.map((n) => (
             <li key={n}>{n}</li>
           ))}

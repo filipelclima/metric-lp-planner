@@ -10,7 +10,7 @@ type Glow = "good" | "bad" | "none";
 const GLOW: Record<Glow, string> = {
   good: "hover:border-good/40 hover:shadow-[0_0_0_1px_rgba(74,222,128,0.15),0_12px_32px_-12px_rgba(74,222,128,0.25)]",
   bad: "hover:border-warn/40 hover:shadow-[0_0_0_1px_rgba(251,191,36,0.15),0_12px_32px_-12px_rgba(251,191,36,0.25)]",
-  none: "hover:border-line",
+  none: "",
 };
 
 /** Surface card with a subtle lift and a border glow (green when net ≥ 0, amber when negative). */
@@ -27,7 +27,7 @@ export function Card({ children, className = "", glow = "none" }: { children: Re
 export function SectionLabel({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
     <div className="mb-2 flex items-center justify-between gap-2">
-      <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">{children}</span>
+      <span className="text-xs font-medium uppercase tracking-[0.08em] text-faint">{children}</span>
       {right}
     </div>
   );
@@ -81,7 +81,7 @@ export function TierBadge({ tier, isPrivate }: { tier: Tier; isPrivate: boolean 
   return (
     <span
       title={isPrivate ? "Deposits restricted to an allowlist" : `Metric tier: ${tier}`}
-      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-medium ${TIER_STYLE[key]}`}
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium ${TIER_STYLE[key]}`}
     >
       <span className="h-1.5 w-1.5 rounded-full bg-current" />
       {isPrivate ? "Private" : TIER_LABEL[tier]}
@@ -93,8 +93,8 @@ export function Field({ label, hint, children }: { label: ReactNode; hint?: Reac
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">{label}</span>
-        {hint && <span className="text-[11px] text-muted">{hint}</span>}
+        <span className="text-xs font-medium uppercase tracking-[0.08em] text-faint">{label}</span>
+        {hint && <span className="text-xs text-muted">{hint}</span>}
       </div>
       {children}
     </div>
@@ -108,7 +108,7 @@ export function TokenLogo({ src, symbol, size = 20 }: { src?: string; symbol: st
   return (
     <span
       style={{ width: size, height: size }}
-      className="relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-3 text-[9px] font-semibold text-muted ring-2 ring-surface"
+      className="relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-3 text-xs font-semibold text-muted ring-2 ring-surface"
     >
       {symbol.slice(0, 2)}
       {src && (
@@ -121,10 +121,16 @@ export function TokenLogo({ src, symbol, size = 20 }: { src?: string; symbol: st
 
 export function ErrorNote({ message, onRetry, retryAfter }: { message: string; onRetry?: () => void; retryAfter?: number | null }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-bad/10 px-3 py-2 text-sm text-bad">
-      <span>
-        {message}
-        {retryAfter ? ` (try again in ~${retryAfter}s)` : ""}
+    <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-bad/10 px-3 py-2.5 text-sm text-text">
+      <span className="flex items-start gap-2.5">
+        <svg className="mt-0.5 h-4 w-4 shrink-0 text-bad" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 8v5M12 16h.01" />
+        </svg>
+        <span>
+          {message}
+          {retryAfter ? ` (try again in ~${retryAfter}s)` : ""}
+        </span>
       </span>
       {onRetry && (
         <button onClick={onRetry} className="rounded-md bg-bad/15 px-2 py-0.5 text-xs hover:bg-bad/25">
@@ -139,7 +145,7 @@ export function ErrorNote({ message, onRetry, retryAfter }: { message: string; o
 export function ChainBadge({ chainId }: { chainId: number }) {
   const c = CHAINS[chainId];
   return (
-    <span title={c?.name ?? `Chain ${chainId}`} className="inline-flex rounded bg-surface-3 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-muted">
+    <span title={c?.name ?? `Chain ${chainId}`} className="inline-flex rounded bg-surface-3 px-1.5 py-0.5 text-xs font-semibold tracking-wide text-muted">
       {c?.short ?? chainId}
     </span>
   );
@@ -158,7 +164,7 @@ export function InfoTip({ children, side = "top", className = "" }: { children: 
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold text-faint ring-1 ring-faint/60 transition hover:text-text hover:ring-text/60"
+        className="inline-flex h-4 w-4 items-center justify-center rounded-full text-xs font-semibold text-faint ring-1 ring-faint/60 transition hover:text-text hover:ring-text/60"
       >
         i
       </button>
@@ -184,10 +190,11 @@ export function InfoTip({ children, side = "top", className = "" }: { children: 
 }
 
 /** Number that counts from its previous value to the new one (~600ms ease-out); instant with reduced motion. */
-export function CountUp({ value, format, className = "" }: { value: number; format: (v: number) => string; className?: string }) {
+/** Animated number; `from` makes it count up on mount (e.g. from 0), otherwise only changes animate. */
+export function CountUp({ value, format, className = "", from }: { value: number; format: (v: number) => string; className?: string; from?: number }) {
   const reduced = useReducedMotion();
   const ref = useRef<HTMLSpanElement>(null);
-  const prev = useRef(value);
+  const prev = useRef(from ?? value);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -206,7 +213,7 @@ export function CountUp({ value, format, className = "" }: { value: number; form
   }, [value, format, reduced]);
   return (
     <span ref={ref} className={`num ${className}`}>
-      {format(value)}
+      {format(from !== undefined && !reduced ? from : value)}
     </span>
   );
 }
@@ -295,7 +302,7 @@ export function Collapsible({
           <motion.span animate={{ rotate: open ? 90 : 0 }} className="text-faint transition group-hover:text-text">
             ›
           </motion.span>
-          <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-faint transition group-hover:text-text">{title}</span>
+          <span className="text-xs font-medium uppercase tracking-[0.08em] text-faint transition group-hover:text-text">{title}</span>
         </button>
         {right}
       </div>
@@ -322,9 +329,45 @@ export function NoTradesBadge({ badge }: { badge: TradeBadge | null }) {
   return (
     <span
       title={TRADE_BADGE_TITLE[badge]}
-      className="inline-flex shrink-0 items-center whitespace-nowrap rounded bg-warn/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-warn"
+      className="inline-flex shrink-0 items-center whitespace-nowrap rounded bg-warn/10 px-1.5 py-0.5 text-xs font-medium leading-none text-warn"
     >
       {badge}
     </span>
+  );
+}
+
+type CalloutTone = "warn" | "info" | "bad" | "good";
+const CALLOUT: Record<CalloutTone, { box: string; icon: string }> = {
+  warn: { box: "bg-warn/10", icon: "text-warn" },
+  info: { box: "bg-accent/8", icon: "text-accent" },
+  bad: { box: "bg-bad/10", icon: "text-bad" },
+  good: { box: "bg-good/10", icon: "text-good" },
+};
+
+/** Warning / note callout: tone-coloured icon on a tinted background, readable body text. */
+export function Callout({ tone = "warn", children, className = "", live = false }: { tone?: CalloutTone; children: ReactNode; className?: string; live?: boolean }) {
+  const c = CALLOUT[tone];
+  return (
+    <div role={live ? "status" : "note"} className={`flex items-start gap-2.5 rounded-xl px-3 py-2.5 text-[13px] leading-snug text-text ${c.box} ${className}`}>
+      <svg className={`mt-0.5 h-4 w-4 shrink-0 ${c.icon}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        {tone === "info" ? (
+          <>
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 11v5M12 8h.01" />
+          </>
+        ) : tone === "good" ? (
+          <>
+            <circle cx="12" cy="12" r="9" />
+            <path d="m8 12 3 3 5-6" />
+          </>
+        ) : (
+          <>
+            <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+            <path d="M12 9v4M12 17h.01" />
+          </>
+        )}
+      </svg>
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
   );
 }

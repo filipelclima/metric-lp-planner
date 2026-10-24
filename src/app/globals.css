@@ -7,8 +7,8 @@
   --surface-3: #1e232c;
   --line: #232934;
   --text: #e8ecf2;
-  --muted: #8a94a6;
-  --faint: #5b6577;
+  --muted: #a6b0c0;
+  --faint: #848fa2;
   --accent: #2dd4bf;
   --accent-soft: rgba(45, 212, 191, 0.14);
   --good: #4ade80;
@@ -72,3 +72,47 @@ body {
 }
 
 input[type="number"]::-webkit-inner-spin-button { opacity: 0.35; }
+
+/* Page transitions (app/template.tsx). */
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.page-in { animation: page-in 180ms ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .page-in { animation: fade-in 120ms linear both; }
+}
+
+/* Header glow behind the logo. */
+.header-glow {
+  background:
+    radial-gradient(420px 160px at 90px 0%, rgba(45, 212, 191, 0.12), transparent 70%),
+    radial-gradient(600px 220px at 50% -60px, rgba(45, 212, 191, 0.05), transparent 75%);
+}
+
+/* One-off glow sweep around the hero when results update (Hero.tsx). */
+@keyframes glow-sweep {
+  0% { opacity: 0; background-position: 0% 50%; }
+  20% { opacity: 1; }
+  100% { opacity: 0; background-position: 100% 50%; }
+}
+.glow-sweep {
+  pointer-events: none;
+  position: absolute;
+  inset: -1px;
+  border-radius: 1rem;
+  padding: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(45, 212, 191, 0) 30%, rgba(45, 212, 191, 0.9) 50%, rgba(45, 212, 191, 0) 70%, transparent 100%);
+  background-size: 300% 100%;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: glow-sweep 900ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .glow-sweep { animation: none; opacity: 0; }
+}

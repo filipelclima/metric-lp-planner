@@ -456,10 +456,13 @@ export const ALLOWLIST_NOTE = "Deposits restricted to an allowlist";
 /** "0xA9…71" */
 export const shortAddress = (a: string) => `${a.slice(0, 4)}…${a.slice(-2)}`;
 
+/** Curator name, else the curator's short address ("0x80…4f"), else "curator". */
+export const curatorName = (p: Pick<Pool, "adminUsername"> & { admin?: string | null }) => p.adminUsername ?? (p.admin ? shortAddress(p.admin) : "curator");
+
 /** Chip text that tells same-pair pools apart: "AI/USDG · RH · TVL $2.3k · vol $12k · Unverified · 0xA9…71". */
 export function poolChipLabel(p: Pool): string {
   const vol = p.analytics24h ? `vol ${compactUsd(p.analytics24h.volumeFiat)}` : "vol —";
-  const curator = p.verifiedAdmin ? `${p.adminUsername ?? "curator"} ✓` : "Unverified";
+  const curator = p.verifiedAdmin ? `${curatorName(p)} ✓` : "Unverified";
   const parts = [p.pair, CHAINS[p.chainId]?.short ?? String(p.chainId), `TVL ${compactUsd(p.tvlFiat)}`, vol, curator, shortAddress(p.poolAddress)];
   if (p.isPrivate) parts.push(ALLOWLIST_NOTE);
   return parts.join(" · ");

@@ -2,6 +2,7 @@
 import { AnimatePresence, motion, useReducedMotion, type Variants } from "framer-motion";
 import Link from "next/link";
 import { tradeBadge } from "@/lib/activity";
+import { toast } from "../Toaster";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { fmtApr, fmtUsd } from "@/lib/calc";
@@ -172,7 +173,7 @@ export default function TopPools() {
               )}
             </Card>
           </motion.div>
-          <p className="text-center text-[11px] text-faint">Historical data from Metric&apos;s public API, not financial advice. Fees ≠ profit.</p>
+          <p className="text-center text-xs text-faint">Historical data from Metric&apos;s public API, not financial advice. Fees ≠ profit.</p>
         </motion.div>
       )}
     </div>
@@ -252,9 +253,10 @@ function WeeklyActions({ rows, filters, qs }: { rows: RankRow[]; filters: Filter
     try {
       await navigator.clipboard.writeText(post());
       setCopied(true);
+      toast("Weekly top 5 copied ✓");
       setTimeout(() => setCopied(false), 1600);
     } catch {
-      /* clipboard unavailable */
+      toast("Couldn't copy (clipboard unavailable)", "error");
     }
   };
   const build = (): ShareLinks => {
@@ -316,7 +318,7 @@ function HighlightCard({
   const color = { good: "text-good", bad: "text-bad", accent: "text-accent" }[tone];
   return (
     <Card glow={tone === "bad" ? "bad" : tone === "good" ? "good" : "none"} className="flex h-full flex-col p-5">
-      <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+      <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.08em] text-faint">
         {title}
         {subtitle && <span className="normal-case tracking-normal">· {subtitle}</span>}
         {tip && <InfoTip>{tip}</InfoTip>}
@@ -357,7 +359,7 @@ function HighlightCard({
 
 function PriceDrivenChip() {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-warn/10 px-1.5 py-0.5 text-[10px] font-medium text-warn">
+    <span className="inline-flex items-center gap-1 rounded-full bg-warn/10 px-1.5 py-0.5 text-xs font-medium text-warn">
       price-driven
       <InfoTip>{PRICE_DRIVEN_TIP}</InfoTip>
     </span>
@@ -371,11 +373,16 @@ function PairCell({ r, className = "" }: { r: RankRow; className?: string }) {
         <TokenLogo src={r.token0.logoUrl} symbol={r.token0.symbol} />
         <TokenLogo src={r.token1.logoUrl} symbol={r.token1.symbol} />
       </span>
-      <span className="truncate font-medium" title={r.pair}>
-        {r.pair}
+      {/* Pair + chain on one line; the "No trades" badge (if any) underneath so it never squeezes the name. */}
+      <span className="flex min-w-0 flex-col items-start gap-1">
+        <span className="flex min-w-0 max-w-full items-center gap-2">
+          <span className="truncate font-medium" title={r.pair}>
+            {r.pair}
+          </span>
+          <ChainBadge chainId={r.chainId} />
+        </span>
+        <NoTradesBadge badge={tradeBadge(r.vol24h, r.feeApr)} />
       </span>
-      <ChainBadge chainId={r.chainId} />
-      <NoTradesBadge badge={tradeBadge(r.vol24h, r.feeApr)} />
     </span>
   );
 }
@@ -432,8 +439,8 @@ function RankTable({ rows, sort, onSort }: { rows: RankRow[]; sort: { key: SortK
   return (
     <div className="hidden overflow-x-auto md:block">
       <table className="w-full min-w-[980px] text-sm">
-        <thead className="text-[10px] uppercase tracking-[0.08em] text-faint">
-          <tr className="border-y border-line/60">
+        <thead className="text-xs uppercase tracking-[0.08em] text-faint">
+          <tr className="border-y border-white/[0.05]">
             <th className="w-10 px-3 py-2 text-left font-medium">#</th>
             {COLUMNS.map((c) => (
               <th key={c.key} className={`px-3 py-2 font-medium ${c.align === "right" ? "text-right" : "text-left"}`} aria-sort={sort.key === c.key ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}>
@@ -446,12 +453,14 @@ function RankTable({ rows, sort, onSort }: { rows: RankRow[]; sort: { key: SortK
                 </span>
               </th>
             ))}
-            <th className="px-3 py-2" />
+            <th className="px-3 py-2">
+              <span className="sr-only">Actions</span>
+            </th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r, i) => (
-            <tr key={`${r.chainId}-${r.pool}`} className="border-b border-line/40 transition-colors hover:bg-surface-2/60">
+            <tr key={`${r.chainId}-${r.pool}`} className="border-b border-white/[0.05] transition-colors hover:bg-surface-2/60">
               <td className="num px-3 py-2.5 text-xs text-faint">{i + 1}</td>
               <td className="max-w-[220px] px-3 py-2.5">
                 <PairCell r={r} />
@@ -500,11 +509,11 @@ function RankCards({ rows }: { rows: RankRow[] }) {
           </div>
           <div className="mt-3 grid grid-cols-2 gap-3">
             <div>
-              <div className="text-[10px] uppercase tracking-[0.08em] text-faint">Fee APR</div>
+              <div className="text-xs uppercase tracking-[0.08em] text-faint">Fee APR</div>
               <AprBar value={r.feeApr} scale={scale} kind="fee" />
             </div>
             <div>
-              <div className="flex items-center gap-1 text-[10px] uppercase tracking-[0.08em] text-faint">
+              <div className="flex items-center gap-1 text-xs uppercase tracking-[0.08em] text-faint">
                 Net APR <InfoTip>{NET_TIP}</InfoTip>
               </div>
               <AprBar value={r.netApr} scale={scale} kind="net" />
@@ -515,7 +524,7 @@ function RankCards({ rows }: { rows: RankRow[] }) {
               )}
             </div>
           </div>
-          <div className="num mt-3 grid grid-cols-3 gap-2 text-[11px] text-muted">
+          <div className="num mt-3 grid grid-cols-3 gap-2 text-xs text-muted">
             <span>
               <span className="block font-sans text-faint">TVL</span>
               {fmtUsd(r.tvl, { compact: true })}

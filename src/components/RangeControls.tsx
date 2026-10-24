@@ -15,7 +15,7 @@ import {
   presetSubLabel,
   type PresetKey,
 } from "@/lib/rangeInputs";
-import { inputCls } from "./ui";
+import { Callout, inputCls } from "./ui";
 
 const PRESET_LABEL: Record<PresetKey, string> = { 80: "80%", 90: "90%", 95: "95%", wider: "Wider" };
 const PRESET_TITLE: Record<PresetKey, string> = {
@@ -72,7 +72,7 @@ export function PresetPicker({ data, value, onPick, size = "md" }: { data: BinDa
             >
               <span className={size === "sm" ? "text-xs" : "text-[13px]"}>{k === "manual" ? "Manual" : PRESET_LABEL[k]}</span>
               {/* "#-2…#0" over "96%" so it fits five buttons in the narrow sidebar; title has the one-line form. */}
-              <span className={`num mt-0.5 flex h-6 max-w-full flex-col items-center text-[9.5px] leading-3 ${on ? "text-accent/80" : "text-faint"}`} title={o ? presetSubLabel(o) : undefined}>
+              <span className={`num mt-0.5 flex h-6 max-w-full flex-col items-center text-xs leading-3 ${on ? "text-accent/80" : "text-faint"}`} title={o ? presetSubLabel(o) : undefined}>
                 {o && (
                   <>
                     <span className="max-w-full truncate">
@@ -86,8 +86,16 @@ export function PresetPicker({ data, value, onPick, size = "md" }: { data: BinDa
           );
         })}
       </div>
-      {note && <p className="mt-1.5 text-[11px] leading-snug text-warn">{note}</p>}
-      {noVolume && <p className="mt-1.5 text-[11px] leading-snug text-faint">{NO_VOLUME_PRESETS}: nothing traded in this data period, so 80/90/95% can&apos;t be computed.</p>}
+      {note && (
+        <Callout tone="info" className="mt-2 text-xs">
+          {note}
+        </Callout>
+      )}
+      {noVolume && (
+        <Callout tone="info" className="mt-2 text-xs">
+          {NO_VOLUME_PRESETS}: nothing traded in this data period, so 80/90/95% can&apos;t be computed.
+        </Callout>
+      )}
     </div>
   );
 }
@@ -131,7 +139,7 @@ export function BinField({
 
   return (
     <div className="min-w-0">
-      <span className="mb-1 block text-[11px] text-faint">{label}</span>
+      <span className="mb-1 block text-xs text-faint">{label}</span>
       <div className="flex gap-1">
         <button type="button" className={btn} onClick={() => step(-1)} disabled={value === null || (bounds !== null && value <= bounds.min)} aria-label={`${label}: one bin lower`}>
           −
@@ -158,11 +166,11 @@ export function BinField({
           +
         </button>
       </div>
-      <div className="num mt-1 min-h-[14px] text-[10px] text-faint">{data && value !== null ? edgeLabel(data, value, side) : ""}</div>
+      <div className="num mt-1 min-h-[14px] text-xs text-faint">{data && value !== null ? edgeLabel(data, value, side) : ""}</div>
       {hint && (
-        <p role="status" className="text-[10.5px] leading-snug text-warn">
+        <Callout live className="mt-1 px-2 py-1.5 text-xs">
           {hint}
-        </p>
+        </Callout>
       )}
     </div>
   );

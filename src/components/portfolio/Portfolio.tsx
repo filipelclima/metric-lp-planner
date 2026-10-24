@@ -99,7 +99,7 @@ function WalletBar({ wallet, chain, onSubmit }: { wallet: string; chain: number 
           )}
         </div>
       </div>
-      <p className="mt-2.5 flex items-center gap-1.5 text-[11px] text-faint">
+      <p className="mt-2.5 flex items-center gap-1.5 text-xs text-faint">
         Read-only: public onchain data and Metric&apos;s public API. No wallet connection, no signatures.
       </p>
     </Card>
@@ -159,7 +159,7 @@ function Results({ data, onRetry }: { data: PortfolioResponse; onRetry: () => vo
           )}
         </>
       )}
-      <p className="text-center text-[11px] text-faint">
+      <p className="text-center text-xs text-faint">
         Values use Metric&apos;s current bin reserves; fees and APRs use the last {Math.round(data.positions[0]?.windowDays ?? 7)}d. Updated{" "}
         {new Date(data.generatedAt).toLocaleTimeString()} · Fees ≠ profit.
       </p>
@@ -192,7 +192,7 @@ function SummaryHero({ data }: { data: PortfolioResponse }) {
     <Card glow={s.pnlUsd === null ? "none" : s.pnlUsd >= 0 ? "good" : "bad"} className="p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+          <div className="text-xs font-medium uppercase tracking-[0.08em] text-faint">
             Total value · {s.count} position{s.count === 1 ? "" : "s"}
           </div>
           <CountUp value={s.valueUsd} format={(v) => fmtUsd(v)} className="mt-1 block text-4xl font-semibold tracking-tight sm:text-5xl" />
@@ -226,7 +226,7 @@ function SummaryHero({ data }: { data: PortfolioResponse }) {
 function HeroStat({ label, tip, children }: { label: string; tip: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
+      <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.08em] text-faint">
         {label}
         <InfoTip>{tip}</InfoTip>
       </div>

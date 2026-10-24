@@ -14,7 +14,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { binPoolApr, chartWindow, fmtApr, fmtBinPct, fmtUsd, getBin, tickStep, type BinData, type Estimate } from "@/lib/calc";
+import { binPoolApr, fmtApr, fmtBinPct, fmtUsd, getBin, tickStep, type BinData, type Estimate } from "@/lib/calc";
+import { activeWindow } from "@/lib/ruler";
 import { InfoTip, Segmented } from "./ui";
 
 type Overlay = "none" | "volume" | "apr";
@@ -47,23 +48,27 @@ const C = {
   bar: "#2a313d",
   barHover: "#3d4655",
   range: "#2dd4bf",
-  active: "#e8ecf2",
+  active: "#c3cbd8",
   user: "#2dd4bf",
   grid: "#1a1f27",
-  tick: "#5b6577",
+  tick: "#848fa2",
   overlay: "#e8ecf2",
 };
 
 export default function Histogram({ data, from, to, estimate, onRange, hovered, onHover }: Props) {
   const reduced = useReducedMotion();
   const [overlay, setOverlay] = useState<Overlay>("none");
+  // Zoomed to bins with liquidity or volume (+2) by default; "Show all bins" shows every bin the pool returned.
+  const [showAll, setShowAll] = useState(false);
   const [drag, setDrag] = useState<{ start: number; end: number } | null>(null);
   const [width, setWidth] = useState(800);
   // Bars grow from 0 once, on first render; later data changes update in place.
   const [grown, setGrown] = useState(!!reduced);
 
   const rows = useMemo<Row[]>(() => {
-    const { lo, hi } = chartWindow(data, from, to);
+    const zoom = activeWindow(data, { from, to });
+    const lo = showAll ? Math.min(data.minIdx, zoom.lo) : zoom.lo;
+    const hi = showAll ? Math.max(data.maxIdx, zoom.hi) : zoom.hi;
     const userByIdx = new Map(estimate.positions.map((p) => [p.bin.idx, p.usd]));
     const out: Row[] = [];
     for (let i = lo; i <= hi; i++) {
@@ -83,7 +88,7 @@ export default function Histogram({ data, from, to, estimate, onRange, hovered, 
       });
     }
     return out;
-  }, [data, from, to, estimate.positions]);
+  }, [data, from, to, estimate.positions, showAll]);
 
   // Label every bin when it fits, otherwise every step-th bin (multiples of the step, so 0 is always labelled).
   const step = tickStep(rows.length, (width - 60) / 30);
@@ -102,18 +107,26 @@ export default function Histogram({ data, from, to, estimate, onRange, hovered, 
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">Liquidity by bin</span>
+          <span className="text-xs font-medium uppercase tracking-[0.08em] text-faint">Liquidity by bin</span>
           <InfoTip side="bottom">
-            Pool liquidity per bin, your range highlighted and your liquidity stacked on top. Drag across the chart to pick a range. The white bar is
-            the active bin; the dashed line marks the oracle price (0%).
+            Pool liquidity per bin, your range highlighted and your liquidity stacked on top. Drag across the chart to pick a range. The light bar
+            outlined in teal is the active bin; the dashed line marks the oracle price (0%). Zoomed to bins that hold liquidity or traded, plus 2.
           </InfoTip>
         </div>
         <div className="flex items-center gap-3">
-          <div className="hidden items-center gap-3 text-[11px] text-muted sm:flex">
+          <div className="hidden items-center gap-3 text-xs text-muted sm:flex">
             <Legend color={C.bar} label="Pool" />
             <Legend color={C.range} label="Your range" opacity={0.4} />
             <Legend color={C.user} label="You" />
           </div>
+          <button
+            type="button"
+            aria-pressed={showAll}
+            onClick={() => setShowAll((v) => !v)}
+            className={`rounded-lg px-2.5 py-1 text-xs transition ${showAll ? "bg-surface-3 text-accent" : "bg-surface-2 text-muted hover:text-text"}`}
+          >
+            {showAll ? "Zoom to active bins" : "Show all bins"}
+          </button>
           <Segmented
             size="sm"
             value={overlay}
@@ -150,18 +163,40 @@ export default function Histogram({ data, from, to, estimate, onRange, hovered, 
               onHover(null);
             }}
           >
+            <defs>
+              <linearGradient id="hg-pool" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stopColor="#3a4453" />
+                <stop offset="1" stopColor="#252c37" />
+              </linearGradient>
+              <linearGradient id="hg-pool-hot" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stopColor="#4c5768" />
+                <stop offset="1" stopColor="#323b48" />
+              </linearGradient>
+              <linearGradient id="hg-range" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stopColor="#2dd4bf" stopOpacity="0.62" />
+                <stop offset="1" stopColor="#2dd4bf" stopOpacity="0.28" />
+              </linearGradient>
+              <linearGradient id="hg-range-hot" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stopColor="#2dd4bf" stopOpacity="0.85" />
+                <stop offset="1" stopColor="#2dd4bf" stopOpacity="0.45" />
+              </linearGradient>
+              <linearGradient id="hg-active" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stopColor="#d5dce6" />
+                <stop offset="1" stopColor="#9aa4b4" />
+              </linearGradient>
+            </defs>
             <CartesianGrid vertical={false} stroke={C.grid} />
             <XAxis
               dataKey="idx"
               interval={0}
-              tick={{ fill: C.tick, fontSize: 10, fontFamily: "var(--font-mono)" }}
+              tick={{ fill: C.tick, fontSize: 12, fontFamily: "var(--font-mono)" }}
               tickFormatter={(v: number) => (v % step === 0 ? String(v) : "")}
               tickLine={false}
               axisLine={false}
             />
             <YAxis
               yAxisId="liq"
-              tick={{ fill: C.tick, fontSize: 10, fontFamily: "var(--font-mono)" }}
+              tick={{ fill: C.tick, fontSize: 12, fontFamily: "var(--font-mono)" }}
               tickLine={false}
               axisLine={false}
               width={52}
@@ -171,7 +206,7 @@ export default function Histogram({ data, from, to, estimate, onRange, hovered, 
               <YAxis
                 yAxisId="ov"
                 orientation="right"
-                tick={{ fill: C.tick, fontSize: 10, fontFamily: "var(--font-mono)" }}
+                tick={{ fill: C.tick, fontSize: 12, fontFamily: "var(--font-mono)" }}
                 tickLine={false}
                 axisLine={false}
                 width={48}
@@ -184,6 +219,7 @@ export default function Histogram({ data, from, to, estimate, onRange, hovered, 
               yAxisId="liq"
               dataKey="pool"
               stackId="s"
+              radius={[3, 3, 0, 0]}
               isAnimationActive={animateBars}
               animationDuration={700}
               animationEasing="ease-out"
@@ -191,8 +227,9 @@ export default function Histogram({ data, from, to, estimate, onRange, hovered, 
             >
               {rows.map((r) => {
                 const hot = r.idx === hovered;
-                const fill = r.idx === data.curBinIdx ? C.active : r.inRange ? C.range : hot ? C.barHover : C.bar;
-                return <Cell key={r.idx} fill={fill} fillOpacity={r.idx === data.curBinIdx ? 0.9 : r.inRange ? (hot ? 0.7 : 0.38) : 1} />;
+                const active = r.idx === data.curBinIdx;
+                const fill = active ? "url(#hg-active)" : r.inRange ? (hot ? "url(#hg-range-hot)" : "url(#hg-range)") : hot ? "url(#hg-pool-hot)" : "url(#hg-pool)";
+                return <Cell key={r.idx} fill={fill} fillOpacity={active ? 0.85 : 1} stroke={active ? C.range : undefined} strokeWidth={active ? 1.5 : 0} />;
               })}
             </Bar>
             <Bar
@@ -216,7 +253,7 @@ export default function Histogram({ data, from, to, estimate, onRange, hovered, 
                 stroke={C.active}
                 strokeOpacity={0.6}
                 strokeDasharray="3 3"
-                label={{ value: "oracle 0%", position: "top", offset: 6, fill: "#8a94a6", fontSize: 10 }}
+                label={{ value: "oracle 0%", position: "top", offset: 6, fill: "#a6b0c0", fontSize: 12 }}
               />
             )}
             {hasActive && (
@@ -224,7 +261,7 @@ export default function Histogram({ data, from, to, estimate, onRange, hovered, 
                 yAxisId="liq"
                 x={data.curBinIdx}
                 stroke="transparent"
-                label={{ value: `active #${data.curBinIdx}`, position: "top", offset: 20, fill: C.active, fontSize: 10 }}
+                label={{ value: `active #${data.curBinIdx}`, position: "top", offset: 20, fill: C.active, fontSize: 12 }}
               />
             )}
           </ComposedChart>
@@ -262,14 +299,14 @@ function RangeOverlay(props: {
     <motion.rect
       y={props.offset.top}
       height={props.offset.height}
-      rx={4}
+      rx={6}
       fill="#2dd4bf"
-      fillOpacity={0.06}
+      fillOpacity={0.05}
       stroke="#2dd4bf"
-      strokeOpacity={0.25}
+      strokeOpacity={0.3}
       initial={false}
       animate={{ x, width }}
-      transition={props.reduced ? { duration: 0 } : { type: "spring", stiffness: 300, damping: 32 }}
+      transition={props.reduced ? { duration: 0 } : { type: "spring", stiffness: 170, damping: 26, mass: 0.9 }}
     />
   );
 }
@@ -290,10 +327,10 @@ function Tip({ active, payload, curBinIdx }: { active?: boolean; payload?: { pay
     <div className="min-w-52 rounded-xl bg-surface-3/95 px-3.5 py-3 text-xs shadow-2xl shadow-black/50 backdrop-blur">
       <div className="mb-2 flex items-center justify-between gap-3">
         <span className="num text-sm font-medium">#{r.idx}</span>
-        {r.idx === curBinIdx && <span className="rounded bg-text/10 px-1.5 py-0.5 text-[10px] text-text">active</span>}
-        {r.inRange && r.idx !== curBinIdx && <span className="rounded bg-accent/15 px-1.5 py-0.5 text-[10px] text-accent">in range</span>}
+        {r.idx === curBinIdx && <span className="rounded bg-text/10 px-1.5 py-0.5 text-xs text-text">active</span>}
+        {r.inRange && r.idx !== curBinIdx && <span className="rounded bg-accent/15 px-1.5 py-0.5 text-xs text-accent">in range</span>}
       </div>
-      <div className="num mb-2 grid grid-cols-3 gap-2 text-[10px] text-muted">
+      <div className="num mb-2 grid grid-cols-3 gap-2 text-xs text-muted">
         <span>
           <span className="block font-sans text-faint">low</span>
           {fmtBinPct(r.lowPct, 4)}

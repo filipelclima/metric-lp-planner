@@ -141,6 +141,8 @@ export interface Pool {
   isPrivate: boolean;
   verifiedAdmin: boolean;
   adminUsername: string | null;
+  /** Curator (admin) address; shown shortened when the curator has no username. */
+  admin?: string | null;
   priceProviderStatus: PriceProviderStatus;
   priceProviderCooldown: { value: number | null; never: boolean };
   pauseLevel: number;

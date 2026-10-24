@@ -58,6 +58,19 @@ Think *Poolfish (uniswap.fish) for Metric*.
 - Motion: count-up numbers, staggered hero entrance, growing bars and an animated range overlay (framer-motion). All of it is disabled under `prefers-reduced-motion`.
 - Shareable URL, e.g. `?chain=56&pool=0x..&amount=1000&days=30&from=-8&to=7&strategy=uniform&period=7d`. A `preset=80|90|95` parameter keeps an auto preset live.
 
+## Interface
+
+- **Landing** (planner with no pool): "Describe your plan" as the hero, with a placeholder that types example sentences (it pauses on focus and stays static with reduced motion).
+  - A live stats strip from the pool list: total TVL, 24h volume, and pools that traded today.
+  - Three **Trending pools** cards from the ranking data: best net APR (fee-driven), highest 24h volume, and safest (Best Practices, highest TVL). They only pick open, healthy pools with ≥ $25k TVL that traded today.
+- **Interactive bin ruler** (Bin plan): click a bin for a 1-bin range, click-and-drag (mouse or touch) to select, drag the edge handles to resize. ←/→ move the range, Shift+←/→ resize it. It updates the same state as the Start/End inputs.
+  - Bins are tinted by their share of the window's volume; the active bin is outlined. Hover shows bin #, edges, pool liquidity, fee and net APR.
+  - "Your plan" + Copy and "You'll need" sit side by side below.
+- **Histogram** zooms to bins that hold liquidity or traded (± 2), with "Show all bins".
+- **⌘K / Ctrl+K** command palette: search pools by pair, token, chain or address from any page; Enter opens the pool in the planner (in place when already on it). Quick actions: Planner, Top pools, Portfolio, Compare.
+- **Toasts** (bottom-right) for copies, downloads and errors. A glow sweeps the results card once when results update. Pages fade/slide in (CSS, 180ms).
+- **Accessibility:** text ≥ 12px, and secondary text tokens meet WCAG AA (≥ 4.5:1) on every surface. Warnings are callouts with an icon on a tinted background. All motion respects `prefers-reduced-motion`. Lighthouse accessibility: 100 on every page (mobile and desktop), no layout shift on load.
+
 ## Describe your plan (planner)
 
 A text box at the top of the planner: type e.g. "Deposit $200 on AI/USDG with a medium range for 60 days" and press **Fill planner** (or Enter). It's a **rule-based parser, with no AI and no API keys**. It only fills the form; every number afterwards comes from the planner's own calc.
@@ -242,6 +255,9 @@ src/lib/poolList.ts    pool picker: sort, filters, APR period, URL/localStorage 
 src/lib/activity.ts    "No trades" badge rule (pure)
 src/lib/noTrades.ts    empty state for windows with no trades (pure)
 src/lib/intent.ts      "Describe your plan" rule-based parser + pool matching (pure)
+src/lib/landing.ts     landing stats, trending picks, auto-typing placeholder (pure)
+src/lib/ruler.ts       bin ruler gestures/keys/tint and histogram zoom (pure)
+src/lib/palette.ts     ⌘K pool + action search (pure)
 src/lib/compare.ts     compare ranges: metrics, best per row, verdicts, cmp URL encoding (pure)
 src/lib/ranking.ts     top pools: rows, filters, sorting, highlights, weekly post (pure)
 src/lib/portfolio/     portfolio: ABIs, pure model (decoding, positions, value, HODL, status, insights), server loader
