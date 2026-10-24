@@ -373,16 +373,22 @@ export function matchPool(intent: ParsedIntent, pools: Pool[]): PoolMatch {
   }
   const best = Math.min(...pool.map((x) => x.d));
   const all = pool.filter((x) => x.d === best).map((x) => x.p).sort(byTvl);
-  // Prefer pools that pass the picker's default filters (TVL ≥ $10k); fall back to small ones only if that's all there is.
+  // TVL only re-ranks: pools ≥ $10k (the picker's default) first, then any with TVL > $0, and $0 pools only
+  // when nothing else has that pair. Nothing that matches is ever dropped for being small.
   const eligible = all.filter(isEligiblePool);
-  const cands = eligible.length ? eligible : all;
+  const funded = all.filter((p) => p.tvlFiat > 0);
+  const tier = eligible.length ? eligible : funded.length ? funded : all;
+  const rest = all.filter((p) => !tier.includes(p) && (p.tvlFiat > 0 || !funded.length));
+  const ordered = [...tier, ...rest];
   const chainNote = intent.chain !== undefined && !onChain.length ? " (not on the chain you named)" : "";
-  if (cands.length === 1) return { kind: "one", pool: cands[0], alternatives: [], note: chainNote ? `Found it on another chain${chainNote}.` : undefined };
+  const smallNote = !eligible.length && tier[0] && tier[0].tvlFiat > 0 ? " Only small pools (under $10k TVL) have this pair." : "";
+  if (tier.length === 1)
+    return { kind: "one", pool: tier[0], alternatives: rest.slice(0, 3), note: chainNote || smallNote ? `${chainNote ? `Found it on another chain${chainNote}.` : ""}${smallNote}`.trim() : undefined };
   if (q.length === 1)
-    return { kind: "one", pool: cands[0], alternatives: cands.slice(1, 4), note: `Picked the largest of ${cands.length} pools with ${q[0]}${chainNote}.` };
-  const total = cands.reduce((s, p) => s + p.tvlFiat, 0);
-  if (total > 0 && cands[0].tvlFiat / total > DOMINANT_TVL_SHARE) return { kind: "one", pool: cands[0], alternatives: cands.slice(1, 4), note: `Picked the largest pool${chainNote}.` };
-  return { kind: "choose", options: cands.slice(0, 5) };
+    return { kind: "one", pool: tier[0], alternatives: ordered.slice(1, 4), note: `Picked the largest of ${all.length} pools with ${q[0]}${chainNote}.${smallNote}` };
+  const total = tier.reduce((s, p) => s + p.tvlFiat, 0);
+  if (total > 0 && tier[0].tvlFiat / total > DOMINANT_TVL_SHARE) return { kind: "one", pool: tier[0], alternatives: ordered.slice(1, 4), note: `Picked the largest pool${chainNote}.${smallNote}` };
+  return { kind: "choose", options: ordered.slice(0, 5) };
 }
 
 // ---------- parser interface ----------

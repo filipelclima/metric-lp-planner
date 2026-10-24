@@ -24,7 +24,9 @@ type Outcome =
   | { kind: "applied"; prev: PlannerState; notes: string[]; word?: RangeWord; widened?: boolean }
   | { kind: "choose"; intent: ParsedIntent; options: Pool[] }
   | { kind: "notFound"; intent: ParsedIntent; query: string; suggestions: Pool[] }
-  | { kind: "nothing"; unknown: string[] };
+  | { kind: "nothing"; unknown: string[] }
+  | { kind: "waiting" }
+  | { kind: "listError"; message: string };
 
 /** A range that needs the (new) pool's bins before it can be turned into bin numbers. */
 type Pending = { kind: "wider" } | { kind: "around"; pct: number } | { kind: "word"; word: Exclude<RangeWord, "wider"> };
@@ -114,9 +116,36 @@ export default function DescribePlan({ m }: { m: PlannerModel }) {
     setOutcome({ kind: "applied", prev, notes, word: intent.range, widened });
   };
 
+  // A submission made before the pool list has loaded waits for it (matching against no pools would say "not found").
+  const [queued, setQueued] = useState<string | null>(null);
+  // After "Retry", re-queue only once the reload has started, so the previous error isn't read as the new result.
+  const retryText = useRef<string | null>(null);
+  useEffect(() => {
+    if (retryText.current !== null && m.list.loading) {
+      setQueued(retryText.current);
+      retryText.current = null;
+    }
+  }, [m.list.loading]);
+  useEffect(() => {
+    if (queued === null) return;
+    if (m.list.data) {
+      setQueued(null);
+      void submit(queued);
+    } else if (m.list.error) {
+      setQueued(null);
+      setOutcome({ kind: "listError", message: m.list.error });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queued, m.list.data, m.list.error]);
+
   const submit = async (value = text) => {
     const t = value.trim();
     if (!t) return;
+    if (!m.list.data) {
+      if (m.list.error && !m.list.loading) return setOutcome({ kind: "listError", message: m.list.error });
+      setQueued(t);
+      return setOutcome({ kind: "waiting" });
+    }
     const { intent, match } = await parseIntent(t, pools);
     if (!understoodAnything(intent)) return setOutcome({ kind: "nothing", unknown: intent.unknown });
     if (match.kind === "choose") return setOutcome({ kind: "choose", intent, options: match.options });
@@ -199,11 +228,28 @@ export default function DescribePlan({ m }: { m: PlannerModel }) {
               <Choices title={ambiguityTitle(outcome.options)} pools={outcome.options} onPick={(p) => apply(outcome.intent, p)} />
             )}
             {outcome.kind === "notFound" && (
-              <Choices
-                title={outcome.query ? `Couldn't find ${outcome.query}. Did you mean:` : "Which pool? Name a pair, or pick one:"}
-                pools={outcome.suggestions}
-                onPick={(p) => apply(outcome.intent, p)}
-              />
+              outcome.suggestions.length ? (
+                <Choices
+                  title={outcome.query ? `Couldn't find ${outcome.query}. Did you mean:` : "Which pool? Name a pair, or pick one:"}
+                  pools={outcome.suggestions}
+                  onPick={(p) => apply(outcome.intent, p)}
+                />
+              ) : (
+                <p className="text-warn">{outcome.query ? `Couldn't find ${outcome.query} on Metric.` : "Name a pool, e.g. AI/USDG."}</p>
+              )
+            )}
+            {outcome.kind === "waiting" && <p className="text-muted">Loading Metric&apos;s pool list…</p>}
+            {outcome.kind === "listError" && (
+              <p className="text-warn">
+                Couldn&apos;t load Metric&apos;s pool list ({outcome.message}).{" "}
+                <button type="button" className="underline" onClick={() => {
+                    retryText.current = text.trim() || null;
+                    setOutcome({ kind: "waiting" });
+                    m.list.retry();
+                  }}>
+                  Retry
+                </button>
+              </p>
             )}
             {outcome.kind === "nothing" && (
               <p className="text-warn">

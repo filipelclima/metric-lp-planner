@@ -353,3 +353,50 @@ describe("fix: range words stay distinct on concentrated pools", () => {
     for (const w of ["narrow", "medium", "wide"] as const) expect(distinctRange(w, spread).widened).toBe(false);
   });
 });
+
+describe("regression: pairs whose only pools are under $10k (live AI/USDG on Robinhood)", () => {
+  const small1 = pool("AI/USDG", 4663, 2_246);
+  const small2 = pool("AI/USDG", 4663, 1_481);
+  const zeros = [pool("AI/USDG", 4663, 0), pool("AI/USDG", 4663, 0), pool("AI/USDG", 4663, 0)];
+  const big = pool("WETH/USDC", 1, 5_000_000);
+  const live = [big, ...zeros, small2, small1];
+  const sentence = "I want to deposit 200 dollars on AI/USDG with a medium range";
+
+  it("the exact sentence → chips for the two small pools, largest first, no $0 pools", async () => {
+    const { intent, match } = await parseIntent(sentence, live);
+    expect(intent.amount).toBe(200);
+    expect(match.kind).toBe("choose");
+    if (match.kind === "choose") expect(match.options).toEqual([small1, small2]);
+  });
+
+  it("a dominant small pool is picked, saying only small pools have the pair", () => {
+    const m = matchPool(parseText("AI/USDG", new Set(["AI", "USDG"])), [big, ...zeros, small1, pool("AI/USDG", 4663, 100)]);
+    expect(m).toMatchObject({ kind: "one", pool: small1 });
+    if (m.kind === "one") {
+      expect(m.note).toMatch(/Only small pools \(under \$10k TVL\) have this pair/);
+      expect(m.alternatives.every((p) => p.tvlFiat > 0)).toBe(true);
+    }
+  });
+
+  it("$0 pools are used only when nothing else has the pair", () => {
+    const m = matchPool(parseText("AI/USDG", new Set(["AI", "USDG"])), [big, ...zeros]);
+    expect(m.kind).toBe("choose");
+    if (m.kind === "choose") expect(m.options).toHaveLength(3);
+  });
+
+  it("a ≥ $10k pool is ranked first but small ones stay in the chips", () => {
+    const mid = pool("AI/USDG", 1, 12_000);
+    const mid2 = pool("AI/USDG", 56, 11_000);
+    const m = matchPool(parseText("AI/USDG", new Set(["AI", "USDG"])), [small1, mid2, ...zeros, mid, small2]);
+    expect(m.kind).toBe("choose");
+    if (m.kind === "choose") expect(m.options).toEqual([mid, mid2, small1, small2]);
+  });
+
+  it("the picked tiny pool gets the risk warning", () => {
+    expect(poolRiskWarning({ tvlFiat: small1.tvlFiat, tier: "red" }, 200, 30)).toMatch(/^⚠ Tiny High-Risk pool \(\$2\.2k TVL\): your \$200 would be ~9% of it/);
+  });
+
+  it("no pools loaded → not found with no suggestions (the UI then says 'Couldn't find … on Metric.')", () => {
+    expect(matchPool(parseText(sentence), [])).toEqual({ kind: "notFound", query: "AI/USDG", suggestions: [] });
+  });
+});
