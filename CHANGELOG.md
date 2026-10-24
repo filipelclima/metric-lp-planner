@@ -4,6 +4,35 @@ One entry per task, newest first. Each entry lists what changed, what couldn't b
 
 ## Entries
 
+### 2026-10-24 · `80be2d3` · Describe your plan (rule-based)
+- **Changed:**
+  - **UI.** A text box at the top of the planner with "Fill planner" (Enter submits), 3 example chips built from the largest pools, and a "How to write it" tip.
+    - It fills the form, and the results flash.
+    - A live one-line summary (range, tokens needed with USD values, est. fees) comes from the planner's own estimate, with **Undo**.
+  - **Parser** (`src/lib/intent.ts`, pure, no AI, no network):
+    - amounts ($, dollars/usd/bucks, k, thousands separators; € read as USD with a note);
+    - pairs (X/Y, X-Y, "x y", "X and Y", single token), with ≤ 1 typo on 3+ char symbols;
+    - chains; range words; explicit bins; ±width; durations; distribution; data period.
+  - **Languages:** keywords in English, Portuguese, Spanish, French, Turkish, Chinese, Vietnamese and Russian.
+  - **Pool matching.** Several pools for a pair → chips, unless one holds > 80% of their TVL ("Picked the largest pool"). A single token → the largest pool containing it. Not found → the 3 closest.
+    - A missing amount keeps the deposit, and the summary says so.
+    - Garbage input → "Couldn't understand that" with the unrecognised words.
+  - `parseIntent(text, pools)` sits behind an `IntentParser` interface, so a fallback can be added later. No AI or API calls were added.
+  - 49 new tests (204 total). `calc.ts`, `urlState.ts` and existing tests are untouched. README updated.
+- **Couldn't test:** Live pools (Metric is blocked in the sandbox). Verified against the local mock on desktop and mobile:
+  - main sentence, Undo, "very wide, curve, using 24h data", "±0.03% on SKHYB/USDT, 2 weeks", not found, garbage, missing amount, an example chip, Spanish;
+  - pools without per-bin data finish with "(no per-bin data)".
+
+  Ambiguity chips are covered by unit tests only, since the mock has no pair on two chains.
+- **Review:**
+  - **±x%** maps to bins whose edges cover ±x% around the **oracle price (0%)**, not the active bin.
+  - **Wider and ±x%** need the pool's bins. On a new pool, the range is briefly set to 95% until the bins load, then replaced.
+  - **Inferred amounts.** A lone number like "500 on X" is read as the deposit, with a note. "€" amounts are taken as USD.
+  - **Typo tolerance** is off for symbols under 3 characters (e.g. "AI" must be exact).
+  - **Single-token queries** auto-pick the largest pool and name how many matched, instead of asking.
+  - **The summary is live:** later edits update it until Undo or the next fill.
+  - **Word collisions:** some words overlap between languages, e.g. Spanish "largo" is read as wide, and Turkish "dar" as narrow.
+
 ### 2026-10-24 · `e93e3a1` · "No trades today" badge
 - **Changed:**
   - The 24h-only badge is renamed from "No trades" to "No trades today", and its tooltip says the pool did trade earlier this week. "No trades 7d" is unchanged and still shows when the 7d fee APR is also 0 or missing.
