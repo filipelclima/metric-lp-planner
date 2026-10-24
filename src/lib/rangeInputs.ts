@@ -165,3 +165,15 @@ export function tokenNeeds(
     : "—";
   return { parts, total, text };
 }
+
+/**
+ * One-line explanation when the range is funded by a single token: entirely above the active bin → only token0,
+ * entirely below → only token1 (calc's splitTokens). null when the range includes the active bin.
+ */
+export function singleSideNote(from: number, to: number, activeBin: number, token0: string, token1: string): string | null {
+  if (from > activeBin)
+    return `Your range is entirely above the current price (active #${activeBin}), so it's funded only with ${token0}. It earns once price moves into it.`;
+  if (to < activeBin)
+    return `Your range is entirely below the current price (active #${activeBin}), so it's funded only with ${token1}. It earns once price moves into it.`;
+  return null;
+}

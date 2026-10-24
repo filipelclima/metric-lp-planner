@@ -122,8 +122,14 @@ export default function BinRuler({ data, from, to, period, onRange }: { data: Bi
           style={{ touchAction: "pan-y" }}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
-          onPointerUp={end}
-          onPointerCancel={end}
+          onPointerUp={(e) => {
+            end();
+            if (e.pointerType !== "mouse") setHover(null); // touch/pen: no hover after lifting
+          }}
+          onPointerCancel={() => {
+            end();
+            setHover(null);
+          }}
           onPointerLeave={() => !gesture && setHover(null)}
         >
           {Array.from({ length: n }, (_, k) => {

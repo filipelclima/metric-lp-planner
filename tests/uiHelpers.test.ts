@@ -3,6 +3,7 @@ import { parseBins } from "@/lib/calc";
 import { curatorName } from "@/lib/intent";
 import { TYPE_TIMING, landingStats, trendingPools, typewriterText } from "@/lib/landing";
 import { plannerHref, poolScore, searchActions, searchPools } from "@/lib/palette";
+import { singleSideNote } from "@/lib/rangeInputs";
 import { activeWindow, dragRange, idxFromX, keyRange, resizeRange, rulerWindow, volumeIntensity } from "@/lib/ruler";
 import type { Pool, Tier } from "@/lib/types";
 
@@ -63,7 +64,7 @@ describe("trending pools", () => {
   });
 
   it("nothing qualifies → nulls", () => {
-    expect(trendingPools([risky, tiny])).toEqual({ bestNet: null, topVolume: null, safest: null });
+    expect(trendingPools([risky, tiny])).toEqual({ bestNet: null, topVolume: null, safest: null, safestFallback: false });
   });
 });
 
@@ -172,5 +173,55 @@ describe("curator display", () => {
     expect(curatorName({ adminUsername: "metricdao", admin: "0x80aa000000000000000000000000000000004f" })).toBe("metricdao");
     expect(curatorName({ adminUsername: null, admin: "0x80aa000000000000000000000000000000004f" })).toBe("0x80…4f");
     expect(curatorName({ adminUsername: null, admin: null })).toBe("curator");
+  });
+});
+
+describe("review fixes", () => {
+  it("palette: 'nvda' finds NVDAB/USDT on BNB by TVL among symbol-prefix matches, hides $0 pools", () => {
+    const big = pool("NVDAB/USDT", { chainId: 56, tvl: 1_000_000 });
+    const rh = [pool("NVDA/USDG", { chainId: 4663, tvl: 5_000 }), pool("NVDA/USDG", { chainId: 4663, tvl: 0 }), pool("NVDA/WETH", { chainId: 4663, tvl: 0 })];
+    const zeros = Array.from({ length: 9 }, () => pool("NVDA/USDG", { chainId: 4663, tvl: 0 }));
+    const out = searchPools([...zeros, ...rh, big], "nvda");
+    expect(out[0]).toBe(big);
+    expect(out.map((p) => p.pair)).toEqual(["NVDAB/USDT", "NVDA/USDG"]);
+    expect(out.every((p) => p.tvlFiat > 0)).toBe(true);
+    // only $0 pools match → shown anyway
+    expect(searchPools(zeros, "nvda").length).toBe(9);
+    // substring inside a symbol still matches (lower tier)
+    expect(searchPools([big], "vdab")).toEqual([big]);
+    expect(poolScore(big, "nvda")).toBeGreaterThan(poolScore(big, "vdab")!);
+  });
+
+  it("histogram zoom ignores dust far from the price (< 1% of the largest bin)", () => {
+    const bins = [-50, -10, -1, 0, 1, 25].map((i) => ({
+      bin: String(i), swapCount: "1", lengthE6: 100,
+      token0: { volumeFiat: i === 0 ? 100 : 0, lpFeesFiat: 0, avgLiquidityFiat: Math.abs(i) >= 10 ? 1 : 5_000, reserveFiat: 0 },
+      token1: { volumeFiat: 0, lpFeesFiat: 0, avgLiquidityFiat: Math.abs(i) >= 10 ? 1 : 5_000, reserveFiat: 0 },
+      aprBps: 1, pnlAprBps: 1,
+    }));
+    const d = parseBins({ window: { fromTs: 0, toTs: 7 * 86400 }, curBinIdx: 0, bins });
+    expect(activeWindow(d, { from: 0, to: 0 })).toEqual({ lo: -3, hi: 3 });
+    expect(d.minIdx).toBe(-50); // "Show all bins" still has the full span
+  });
+
+  it("single-token note: above → only token0, below → only token1, straddling → none", () => {
+    expect(singleSideNote(-6, -3, -9, "SKHYB", "USDT")).toBe(
+      "Your range is entirely above the current price (active #-9), so it's funded only with SKHYB. It earns once price moves into it.",
+    );
+    expect(singleSideNote(-15, -12, -9, "SKHYB", "USDT")).toBe(
+      "Your range is entirely below the current price (active #-9), so it's funded only with USDT. It earns once price moves into it.",
+    );
+    expect(singleSideNote(-10, -9, -9, "SKHYB", "USDT")).toBeNull();
+  });
+
+  it("'Safest' needs net APR ≥ 0; otherwise the largest Best Practices pool, flagged as a fallback", () => {
+    const losing = pool("WETH/USDG", { tvl: 5_000_000, fee: 500, net: -2_473, vol: 1_000 });
+    const ok = pool("OK/USDT", { tvl: 200_000, fee: 500, net: 100, vol: 1_000 });
+    const t = trendingPools([losing, ok]);
+    expect(t.safest?.pair).not.toBe("WETH/USDG");
+    expect(t.safestFallback).toBe(false);
+    const t2 = trendingPools([losing]);
+    expect(t2.safest?.pair).toBe("WETH/USDG");
+    expect(t2.safestFallback).toBe(true);
   });
 });

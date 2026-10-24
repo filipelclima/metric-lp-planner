@@ -57,7 +57,7 @@ export default function CommandPalette() {
   }, [open]);
 
   const items: Item[] = useMemo(() => {
-    const pools = searchPools(list.data?.pools ?? [], query, query ? 8 : 6).map((pool): Item => ({ kind: "pool", pool }));
+    const pools = searchPools(list.data?.pools ?? [], query, query ? 10 : 6).map((pool): Item => ({ kind: "pool", pool }));
     const actions = searchActions(query).map((a): Item => ({ kind: "action", label: a.label, href: a.href }));
     return query ? [...pools, ...actions] : [...actions, ...pools];
   }, [list.data, query]);

@@ -19,7 +19,7 @@ import {
 } from "@/lib/calc";
 import { NET_NOTE } from "@/lib/plan";
 import { noTradesState } from "@/lib/noTrades";
-import { hasVolume, rangeEdgesNote, tokenNeeds } from "@/lib/rangeInputs";
+import { hasVolume, rangeEdgesNote, singleSideNote, tokenNeeds } from "@/lib/rangeInputs";
 import { useApi } from "@/lib/useApi";
 import type { Period, Pool, RawBinsResponse } from "@/lib/types";
 import type { PlannerModel } from "@/lib/usePlanner";
@@ -28,7 +28,7 @@ import BinRuler from "./BinRuler";
 import { RiskAlert, RiskPills } from "./Risk";
 import { toast } from "./Toaster";
 import ShareMenu from "./ShareMenu";
-import { Card, CountUp, ErrorNote, InfoTip, Popover, SectionLabel, Skeleton, TokenLogo } from "./ui";
+import { Callout, Card, CountUp, ErrorNote, InfoTip, Popover, SectionLabel, Skeleton, TokenLogo } from "./ui";
 
 const PRESET_DAYS = [30, 60, 90];
 const NOMINAL_DAYS: Record<Period, number> = { "24h": 1, "7d": 7, "30d": 30 };
@@ -381,6 +381,7 @@ function BinPlanStrip({ pool, data, from, to, estimate, period, onRange }: { poo
   const summary = planText(data, from, to).split("\n")[2].replace(/ · active bin #-?\d+$/, "");
   const line = `#${from} (${fmtPlanPct(getBin(data, from).midPct)}) → #${to} (${fmtPlanPct(getBin(data, to).midPct)}) · ${summary}`;
   const { tokens, needs } = tokenParts(pool, estimate);
+  const oneSided = singleSideNote(from, to, data.curBinIdx, pool.token0.symbol, pool.token1.symbol);
 
   const copy = async () => {
     try {
@@ -450,6 +451,11 @@ function BinPlanStrip({ pool, data, from, to, estimate, period, onRange }: { poo
               <span className="font-sans text-muted">Total</span>
               <span className="text-text">{needs.total}</span>
             </div>
+          )}
+          {oneSided && (
+            <Callout tone="info" className="mt-3 text-xs">
+              {oneSided}
+            </Callout>
           )}
         </div>
       </div>

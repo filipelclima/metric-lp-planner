@@ -55,7 +55,11 @@ export default function Landing({ m }: { m: PlannerModel }) {
             <>
               <TrendingCard title="Best net APR" sub="fee-driven: net ≤ fee" row={trending.bestNet} onPlan={plan} />
               <TrendingCard title="Highest 24h volume" sub="most traded today" row={trending.topVolume} onPlan={plan} />
-              <TrendingCard title="Safest" sub="Best Practices, highest TVL" row={trending.safest} onPlan={plan} />
+              {trending.safestFallback ? (
+                <TrendingCard title="Largest Best-Practices pool" sub="highest TVL; none has net APR ≥ 0 now" row={trending.safest} onPlan={plan} />
+              ) : (
+                <TrendingCard title="Safest" sub="Best Practices, net APR ≥ 0, highest TVL" row={trending.safest} onPlan={plan} />
+              )}
             </>
           ) : (
             [0, 1, 2].map((i) => <Skeleton key={i} className="h-[214px] rounded-2xl" />)

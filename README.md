@@ -62,12 +62,12 @@ Think *Poolfish (uniswap.fish) for Metric*.
 
 - **Landing** (planner with no pool): "Describe your plan" as the hero, with a placeholder that types example sentences (it pauses on focus and stays static with reduced motion).
   - A live stats strip from the pool list: total TVL, 24h volume, and pools that traded today.
-  - Three **Trending pools** cards from the ranking data: best net APR (fee-driven), highest 24h volume, and safest (Best Practices, highest TVL). They only pick open, healthy pools with ≥ $25k TVL that traded today.
+  - Three **Trending pools** cards from the ranking data: best net APR (fee-driven), highest 24h volume, and safest (Best Practices with net APR ≥ 0, highest TVL; if none, "Largest Best-Practices pool"). They only pick open, healthy pools with ≥ $25k TVL that traded today.
 - **Interactive bin ruler** (Bin plan): click a bin for a 1-bin range, click-and-drag (mouse or touch) to select, drag the edge handles to resize. ←/→ move the range, Shift+←/→ resize it. It updates the same state as the Start/End inputs.
   - Bins are tinted by their share of the window's volume; the active bin is outlined. Hover shows bin #, edges, pool liquidity, fee and net APR.
-  - "Your plan" + Copy and "You'll need" sit side by side below.
-- **Histogram** zooms to bins that hold liquidity or traded (± 2), with "Show all bins".
-- **⌘K / Ctrl+K** command palette: search pools by pair, token, chain or address from any page; Enter opens the pool in the planner (in place when already on it). Quick actions: Planner, Top pools, Portfolio, Compare.
+  - "Your plan" + Copy and "You'll need" sit side by side below. A range entirely above the active bin is funded only with token0 (below: only token1), and a note says so.
+- **Histogram** zooms to bins holding ≥ 1% of the largest bin's liquidity or ≥ 1% of the busiest bin's volume (± 2; dust far from the price is ignored), with "Show all bins".
+- **⌘K / Ctrl+K** command palette: search pools on all chains (the picker's filters don't apply) by pair, token (substring: nvda → NVDA, NVDAB), chain or address, ranked by match quality then TVL; $0-TVL pools only when nothing else matches; Enter opens the pool in the planner (in place when already on it). Quick actions: Planner, Top pools, Portfolio, Compare.
 - **Toasts** (bottom-right) for copies, downloads and errors. A glow sweeps the results card once when results update. Pages fade/slide in (CSS, 180ms).
 - **Accessibility:** text ≥ 12px, and secondary text tokens meet WCAG AA (≥ 4.5:1) on every surface. Warnings are callouts with an icon on a tinted background. All motion respects `prefers-reduced-motion`. Lighthouse accessibility: 100 on every page (mobile and desktop), no layout shift on load.
 

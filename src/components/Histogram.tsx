@@ -139,7 +139,13 @@ export default function Histogram({ data, from, to, estimate, onRange, hovered, 
           />
         </div>
       </div>
-      <div className="h-56 w-full cursor-crosshair xl:h-60">
+      {/* Leaving the chart (mouse or touch) always clears the hover, so the tooltip can't get stuck. */}
+      <div
+        className="h-56 w-full cursor-crosshair xl:h-60"
+        onPointerLeave={() => onHover(null)}
+        onTouchEnd={() => onHover(null)}
+        onTouchCancel={() => onHover(null)}
+      >
         <ResponsiveContainer onResize={(w) => w > 0 && setWidth(w)}>
           <ComposedChart
             data={rows}
@@ -214,7 +220,7 @@ export default function Histogram({ data, from, to, estimate, onRange, hovered, 
               />
             )}
             <Customized component={<RangeOverlay a={sel.a} b={sel.b} reduced={!!reduced} />} />
-            <Tooltip cursor={false} content={<Tip curBinIdx={data.curBinIdx} />} isAnimationActive={false} />
+            <Tooltip cursor={false} active={hovered === null ? false : undefined} content={<Tip curBinIdx={data.curBinIdx} />} isAnimationActive={false} />
             <Bar
               yAxisId="liq"
               dataKey="pool"

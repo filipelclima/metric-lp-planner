@@ -68,15 +68,21 @@ export function keyRange(r: Range, key: string, shift: boolean, bounds?: { min: 
   return { from: r.from + d, to: r.to + d };
 }
 
+/** A bin counts as "holding liquidity" / "traded" for the histogram zoom above this share of the busiest bin. */
+export const ZOOM_MIN_SHARE = 0.01;
+
 /**
- * Histogram auto-zoom: bins that hold liquidity or traded, plus the range and the active bin, with `pad`
- * bins either side. Falls back to the range ± pad when nothing has liquidity or volume.
+ * Histogram auto-zoom: bins holding at least 1% of the largest bin's liquidity or 1% of the busiest bin's volume
+ * (dust far from the price is ignored), plus the range and the active bin, with `pad` bins either side.
+ * Falls back to the range ± pad when nothing qualifies.
  */
-export function activeWindow(data: BinData, r: Range, pad = 2): { lo: number; hi: number } {
+export function activeWindow(data: BinData, r: Range, pad = 2, minShare = ZOOM_MIN_SHARE): { lo: number; hi: number } {
   let lo = Math.min(r.from, data.curBinIdx);
   let hi = Math.max(r.to, data.curBinIdx);
+  const maxLiq = Math.max(0, ...data.bins.map((b) => b.liquidity));
+  const maxVol = Math.max(0, ...data.bins.map((b) => b.volumeFiat));
   for (const b of data.bins) {
-    if (b.liquidity > 0 || b.volumeFiat > 0) {
+    if ((maxLiq > 0 && b.liquidity >= maxLiq * minShare) || (maxVol > 0 && b.volumeFiat >= maxVol * minShare)) {
       lo = Math.min(lo, b.idx);
       hi = Math.max(hi, b.idx);
     }

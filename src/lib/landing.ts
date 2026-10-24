@@ -34,8 +34,10 @@ export interface Trending {
   /** Best net APR among fee-driven pools (net ≤ fee), as on Top pools. */
   bestNet: RankRow | null;
   topVolume: RankRow | null;
-  /** Best Practices tier, highest TVL. */
+  /** Best Practices tier with net APR ≥ 0, highest TVL; if none, the largest Best Practices pool (see `safestFallback`). */
   safest: RankRow | null;
+  /** True when no Best Practices pool had net APR ≥ 0, so `safest` is just the largest one (titled accordingly). */
+  safestFallback: boolean;
 }
 
 function maxBy(rows: RankRow[], f: (r: RankRow) => number | null, skip: Set<string>): RankRow | null {
@@ -50,7 +52,10 @@ function maxBy(rows: RankRow[], f: (r: RankRow) => number | null, skip: Set<stri
 }
 const key = (r: RankRow) => `${r.chainId}:${r.pool.toLowerCase()}`;
 
-/** Three distinct picks when possible (a pool that already won a card is skipped by the next ones). */
+/**
+ * Three distinct picks when possible (a pool that already won a card is skipped by the next ones). "Safest" needs a
+ * known net APR ≥ 0; without one it falls back to the largest Best Practices pool (`safestFallback`).
+ */
 export function trendingPools(pools: Pool[]): Trending {
   const rows = pools
     .map(toRow)
@@ -61,8 +66,10 @@ export function trendingPools(pools: Pool[]): Trending {
   const topVolume = maxBy(rows, (r) => r.vol24h, used) ?? maxBy(rows, (r) => r.vol24h, new Set());
   if (topVolume) used.add(key(topVolume));
   const green = rows.filter((r) => r.tier === "green");
-  const safest = maxBy(green, (r) => r.tvl, used) ?? maxBy(green, (r) => r.tvl, new Set());
-  return { bestNet, topVolume, safest };
+  const safeGreen = green.filter((r) => r.netApr !== null && r.netApr >= 0);
+  const safe = maxBy(safeGreen, (r) => r.tvl, used) ?? maxBy(safeGreen, (r) => r.tvl, new Set());
+  const safest = safe ?? maxBy(green, (r) => r.tvl, used) ?? maxBy(green, (r) => r.tvl, new Set());
+  return { bestNet, topVolume, safest, safestFallback: !safe && !!safest };
 }
 
 // ---------- auto-typing placeholder ----------
