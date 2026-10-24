@@ -4,6 +4,51 @@ One entry per task, newest first. Each entry lists what changed, what couldn't b
 
 ## Entries
 
+### 2026-10-24 · `7431095` · UI polish pass
+- **Changed:**
+  - **Landing** (planner without a pool): replaces the empty panel.
+    - "Describe your plan" is the hero, with a placeholder that types 3 example sentences (it pauses on focus, static with reduced motion).
+    - A stats strip that counts up: total TVL, 24h volume, active pools.
+    - 3 Trending pools cards built from the ranking module: best net (fee-driven), highest 24h volume, safest (Best Practices, highest TVL). Each has fee/net mini-bars, TVL and "Plan this pool", and lifts with a glow on hover.
+    - A pool picker / ⌘K row at the bottom.
+  - **Bin ruler.** Taller, full card width, and interactive:
+    - click to select a bin, click-and-drag (mouse and touch), drag either edge handle;
+    - ←/→ moves the range, Shift+←/→ resizes it. Same state as the Start/End inputs.
+    - Bins are tinted by volume share, selected bins are accent and the active bin is outlined. Hover shows a tooltip.
+    - Plan + Copy and "You'll need" (with a total) sit in two columns underneath.
+  - **Histogram.** Auto-zooms to bins with liquidity or volume ± 2, with a "Show all bins" toggle. Gradient bars with rounded tops; the active bar is light grey with an accent outline; the range overlay moves more smoothly.
+  - **Type and contrast.**
+    - No text under 12px, including chart ticks.
+    - `--faint` is now #848fa2 (≥ 4.5:1 on every surface) and `--muted` #a6b0c0.
+    - Warnings are callouts (icon + tinted background); `ErrorNote` has an icon.
+    - Portfolio insights are callouts. Table dividers are softer, and plain cards no longer get a border on hover.
+  - **Professional touches.**
+    - ⌘K / Ctrl+K command palette: pools by pair/token/chain/address, private pools last, plus quick actions. Enter switches the planner in place when you're on it, otherwise navigates.
+    - Toasts (Plan copied, Link copied, Image downloaded, errors).
+    - One glow sweep around the results card when results update.
+    - CSS page transitions (180ms).
+    - A header glow, a refined logo and a search button.
+    - Unnamed curators show their short address (0x80…4f).
+  - **No layout shift on load.** `<main>` has a minimum height, so the footer no longer jumps, and the loading skeletons match the loaded heights.
+  - **Accessibility fixes.** The risk pills' accessible name now matches the visible text. The empty table header cells and the header search button now have proper accessible names.
+  - New pure helpers (`landing.ts`, `ruler.ts`, `palette.ts`) with 15 tests (247 total). `calc.ts`, `urlState.ts` and existing tests are untouched.
+- **Couldn't test:** Live data (Metric is blocked in the sandbox). Verified against the local mock:
+  - desktop (1440×900) and mobile (390×844) screenshots of all pages;
+  - Playwright: palette from the landing and from /pools, ruler click/drag/handle/keyboard/touch, tooltip, toasts, reduced motion;
+  - CLS 0.0000 on every page at both sizes;
+  - Lighthouse accessibility 100 with no failed audits on every page, mobile and desktop.
+
+  The histogram zoom can't be seen on the mock, where every bin has volume; it's covered by unit tests.
+- **Review:**
+  - **Data plumbing:** the curator's address needed a one-line passthrough in `normalize.ts` (`Pool.admin`).
+  - **Landing definitions:**
+    - "Active pools" = traded in 24h and not paused.
+    - The trending cards skip private, paused, unhealthy-feed, High-Risk, < $25k TVL and no-trade pools, and prefer three different pools.
+  - **Shortcut and focus:** ⌘K overrides the browser shortcut, and the palette input uses `autoFocus`.
+  - **Ruler window:** it freezes while you drag. The ruler and histogram show the data period's APRs, labeled with that period.
+  - **Planner layout:** the compact Describe box hides its example chips on phones.
+  - **Skeleton heights** are tuned to the current layout; a pool with a risk alert or an error banner can still shift content below a little.
+
 ### 2026-10-24 · `565ddff` · Pool picker: private pools
 - **Changed:**
   - New "Hide private pools" toggle, on by default and remembered like the other filters (`pprivate=1` in the URL when off, plus localStorage).
