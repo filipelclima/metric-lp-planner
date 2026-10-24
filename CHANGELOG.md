@@ -4,6 +4,24 @@ One entry per task, newest first. Each entry lists what changed, what couldn't b
 
 ## Entries
 
+### 2026-10-24 · `1f2d8ec` · Describe your plan: ambiguity, risk warning, distinct ranges
+- **Changed:**
+  - **Ambiguity.**
+    - When the pools share a chain, the message reads "That pair has 2 pools on Robinhood. Which one?". Otherwise it says "That pair is on 2 chains (BNB, Robinhood)".
+    - Chips show a tier badge plus "AI/USDG · RH · TVL $2.3k · vol $12k · Unverified · 0xA9…71" (curator name ✓ when verified).
+  - **Matching** prefers pools with TVL ≥ $10k (the picker's default), and falls back to smaller ones only when nothing else matches.
+  - **Risk warning** (amber, in the summary) when the deposit is > 10% of TVL, TVL < $10k, or the tier is High Risk or delisted. Example: "⚠ Tiny High-Risk pool ($2.3k TVL): your $200 would be ~9% of it, so these estimates (≈3,000% APR) are unreliable."
+  - **Distinct range words** on concentrated pools. "Wide" equal to "medium" → the Wider preset. "Medium" equal to "narrow" → narrow ± 1 bin. The summary adds "(widened, pool is concentrated)".
+  - **Fix:** when a pool's bins fail to load, the summary no longer stays on "Filling the planner…".
+  - 14 new tests (218 total).
+- **Couldn't test:** Live pools (Metric is blocked in the sandbox). Verified against the mock: High-Risk pool, $900 pool, a deposit at 60% of TVL, and a normal case with no warning.
+  - Ambiguity chips and range widening are covered by unit tests only: the mock has no same-pair pools and no concentrated presets.
+- **Review:**
+  - The warning's share is deposit ÷ current TVL. Exactly 10% doesn't warn.
+  - "Delisted" pools are worded like High Risk.
+  - The ≥ $10k preference applies before the 80%-of-TVL rule, so a $20k pool beats two smaller ones without asking.
+  - Widening is checked against the plain 80/90/95% presets of the selected data period.
+
 ### 2026-10-24 · `80be2d3` · Describe your plan (rule-based)
 - **Changed:**
   - **UI.** A text box at the top of the planner with "Fill planner" (Enter submits), 3 example chips built from the largest pools, and a "How to write it" tip.
