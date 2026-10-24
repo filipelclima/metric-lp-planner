@@ -4,6 +4,15 @@ One entry per task, newest first. Each entry lists what changed, what couldn't b
 
 ## Entries
 
+### 2026-10-24 · `5f52089` · Describe your plan: private pools last
+- **Changed:**
+  - Private (deposit-allowlisted) pools rank after every open match, even bigger ones. They're auto-picked only when every match is private.
+  - Their chip adds "Deposits restricted to an allowlist", next to the existing "Private" badge.
+  - Picking one adds "Deposits restricted to an allowlist: you can only deposit if the curator has allowlisted your wallet." to the summary warning, on its own or after the size/risk warning.
+  - 5 new tests (229 total).
+- **Couldn't test:** Live data (Metric is blocked in the sandbox). Verified in the browser against the mock with a private $5k AI/USDG pool injected next to two smaller open ones: the chips were ordered open first, and picking the private chip showed the allowlist warning.
+- **Review:** The planner's pool picker still lists private pools in their normal TVL order; only the text matcher ranks them last.
+
 ### 2026-10-24 · `a7a612b` · Fix: Describe your plan lost small pools
 - **Changed:**
   - **Root cause.** An empty "Did you mean:" list means the parser matched against zero pools: the sentence was submitted before `/api/pools` had loaded.
