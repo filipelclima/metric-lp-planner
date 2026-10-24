@@ -374,11 +374,18 @@ export function matchPool(intent: ParsedIntent, pools: Pool[]): PoolMatch {
   const best = Math.min(...pool.map((x) => x.d));
   const all = pool.filter((x) => x.d === best).map((x) => x.p).sort(byTvl);
   // TVL only re-ranks: pools ≥ $10k (the picker's default) first, then any with TVL > $0, and $0 pools only
-  // when nothing else has that pair. Nothing that matches is ever dropped for being small.
-  const eligible = all.filter(isEligiblePool);
-  const funded = all.filter((p) => p.tvlFiat > 0);
-  const tier = eligible.length ? eligible : funded.length ? funded : all;
-  const rest = all.filter((p) => !tier.includes(p) && (p.tvlFiat > 0 || !funded.length));
+  // when nothing else has that pair. Private (allowlisted) pools go last and are only auto-picked when every
+  // match is private. Nothing that matches is ever dropped for being small.
+  const open = all.filter((p) => !p.isPrivate);
+  const base = open.length ? open : all;
+  const eligible = base.filter(isEligiblePool);
+  const funded = base.filter((p) => p.tvlFiat > 0);
+  const tier = eligible.length ? eligible : funded.length ? funded : base;
+  const anyFunded = all.some((p) => p.tvlFiat > 0);
+  const rest = [
+    ...base.filter((p) => !tier.includes(p) && (p.tvlFiat > 0 || !funded.length)),
+    ...(open.length ? all.filter((p) => p.isPrivate && (p.tvlFiat > 0 || !anyFunded)) : []),
+  ];
   const ordered = [...tier, ...rest];
   const chainNote = intent.chain !== undefined && !onChain.length ? " (not on the chain you named)" : "";
   const smallNote = !eligible.length && tier[0] && tier[0].tvlFiat > 0 ? " Only small pools (under $10k TVL) have this pair." : "";
@@ -443,6 +450,9 @@ export function ambiguityTitle(options: Pool[]): string {
   return `That pair is on ${chains.length} chains (${chains.map(chainName).join(", ")}). Which pool?`;
 }
 
+/** Shown on chips (and in the summary warning) for private, deposit-allowlisted pools. */
+export const ALLOWLIST_NOTE = "Deposits restricted to an allowlist";
+
 /** "0xA9…71" */
 export const shortAddress = (a: string) => `${a.slice(0, 4)}…${a.slice(-2)}`;
 
@@ -450,7 +460,9 @@ export const shortAddress = (a: string) => `${a.slice(0, 4)}…${a.slice(-2)}`;
 export function poolChipLabel(p: Pool): string {
   const vol = p.analytics24h ? `vol ${compactUsd(p.analytics24h.volumeFiat)}` : "vol —";
   const curator = p.verifiedAdmin ? `${p.adminUsername ?? "curator"} ✓` : "Unverified";
-  return [p.pair, CHAINS[p.chainId]?.short ?? String(p.chainId), `TVL ${compactUsd(p.tvlFiat)}`, vol, curator, shortAddress(p.poolAddress)].join(" · ");
+  const parts = [p.pair, CHAINS[p.chainId]?.short ?? String(p.chainId), `TVL ${compactUsd(p.tvlFiat)}`, vol, curator, shortAddress(p.poolAddress)];
+  if (p.isPrivate) parts.push(ALLOWLIST_NOTE);
+  return parts.join(" · ");
 }
 
 // ---------- small / risky pool warning ----------
@@ -462,21 +474,23 @@ const HIGH_RISK = new Set(["red", "black"]);
 /**
  * Amber warning for the summary when the estimate can't be trusted: deposit > 10% of TVL, TVL < $10k, or a
  * High-Risk (or delisted) tier. e.g. "⚠ Tiny High-Risk pool ($2.3k TVL): your $200 would be ~9% of it, so these
- * estimates (≈3,000% APR) are unreliable." null when none applies.
+ * estimates (≈3,000% APR) are unreliable." A private pool adds "Deposits restricted to an allowlist: …".
+ * null when none applies.
  */
-export function poolRiskWarning(p: Pick<Pool, "tvlFiat" | "tier">, deposit: number, feeApr: number | null): string | null {
+export function poolRiskWarning(p: Pick<Pool, "tvlFiat" | "tier"> & { isPrivate?: boolean }, deposit: number, feeApr: number | null): string | null {
   const share = p.tvlFiat > 0 ? deposit / p.tvlFiat : Infinity;
   const tiny = p.tvlFiat < MIN_ELIGIBLE_TVL;
   const big = share > BIG_SHARE;
   const risky = HIGH_RISK.has(p.tier);
-  if (!tiny && !big && !risky) return null;
+  const allowlist = p.isPrivate ? `${ALLOWLIST_NOTE}: you can only deposit if the curator has allowlisted your wallet.` : null;
+  if (!tiny && !big && !risky) return allowlist && `⚠ ${allowlist}`;
   const size = tiny ? "Tiny" : big ? "Small" : "";
   const tierWord = risky ? (p.tier === "black" ? "Delisted" : "High-Risk") : "";
   const what = [size, tierWord].filter(Boolean).join(" ");
   const apr = feeApr !== null && Number.isFinite(feeApr) ? ` (≈${Math.round(feeApr * 100).toLocaleString("en-US")}% APR)` : "";
   const shareText = !Number.isFinite(share) ? "the whole pool" : share >= 0.995 ? `${Math.round(share)}× its size` : `~${Math.max(1, Math.round(share * 100))}% of it`;
   const why = tiny || big ? `your ${compactUsd(deposit)} would be ${shareText}, so these estimates${apr} are unreliable` : `Metric rates it ${TIER_LABEL[p.tier]}, so these estimates${apr} may not hold`;
-  return `⚠ ${what} pool (${compactUsd(p.tvlFiat)} TVL): ${why}.`;
+  return `⚠ ${what} pool (${compactUsd(p.tvlFiat)} TVL): ${why}.${allowlist ? ` ${allowlist}` : ""}`;
 }
 
 // ---------- distinct range words ----------

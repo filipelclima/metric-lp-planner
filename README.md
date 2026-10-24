@@ -78,6 +78,7 @@ A text box at the top of the planner: type e.g. "Deposit $200 on AI/USDG with a 
   - No amount → keeps the current deposit and says so.
   - A lone number is used as the deposit, and the summary says so.
 - **Ambiguity chips** tell same-pair pools apart: tier badge, chain, TVL, 24h volume, curator (name ✓ or "Unverified") and a short address. The message says "That pair has 2 pools on Robinhood" when they share a chain.
+- **Private (deposit-allowlisted) pools rank last** and are auto-picked only when every match is private. Their chip says "Deposits restricted to an allowlist", and picking one adds that to the summary warning.
 - **TVL only re-ranks matches, never removes them:** pools ≥ $10k first (the picker's default), then any with TVL > $0, and $0 pools only when nothing else has the pair. `/api/pools` includes every pool (`minTvlFiat=0`). A submission made before the pool list has loaded waits for it.
 - **Range words stay distinct** on concentrated pools: "wide" that equals "medium" becomes the Wider preset; "medium" that equals "narrow" becomes narrow ± 1 bin. The summary says "(widened, pool is concentrated)".
 - **Risk warning** (amber, in the summary) when the deposit is > 10% of the pool's TVL, TVL < $10k, or the tier is High Risk / delisted, e.g. "⚠ Tiny High-Risk pool ($2.3k TVL): your $200 would be ~9% of it, so these estimates (≈3,000% APR) are unreliable."

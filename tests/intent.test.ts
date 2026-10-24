@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseBins } from "@/lib/calc";
 import {
+  ALLOWLIST_NOTE,
   ambiguityTitle,
   binsAround,
   compactUsd,
@@ -398,5 +399,44 @@ describe("regression: pairs whose only pools are under $10k (live AI/USDG on Rob
 
   it("no pools loaded → not found with no suggestions (the UI then says 'Couldn't find … on Metric.')", () => {
     expect(matchPool(parseText(sentence), [])).toEqual({ kind: "notFound", query: "AI/USDG", suggestions: [] });
+  });
+});
+
+describe("private (deposit-allowlisted) pools", () => {
+  const priv = (pair: string, chainId: number, tvl: number) => ({ ...pool(pair, chainId, tvl), isPrivate: true }) as Pool;
+  const S = new Set(["AI", "USDG"]);
+
+  it("rank last, even when bigger", () => {
+    const p1 = priv("AI/USDG", 4663, 50_000);
+    const a = pool("AI/USDG", 4663, 2_246);
+    const b = pool("AI/USDG", 4663, 1_481);
+    const m = matchPool(parseText("AI/USDG", S), [p1, a, b]);
+    expect(m.kind).toBe("choose");
+    if (m.kind === "choose") expect(m.options).toEqual([a, b, p1]);
+  });
+
+  it("never auto-picked over an open pool", () => {
+    const open = pool("AI/USDG", 4663, 2_000);
+    const m = matchPool(parseText("AI/USDG", S), [priv("AI/USDG", 4663, 900_000), open]);
+    expect(m).toMatchObject({ kind: "one", pool: open });
+  });
+
+  it("used when every match is private", () => {
+    const only = priv("AI/USDG", 4663, 30_000);
+    expect(matchPool(parseText("AI/USDG", S), [only])).toMatchObject({ kind: "one", pool: only });
+  });
+
+  it("chip says 'Deposits restricted to an allowlist'", () => {
+    expect(poolChipLabel(priv("AI/USDG", 4663, 2_300))).toMatch(/ · Deposits restricted to an allowlist$/);
+    expect(poolChipLabel(pool("AI/USDG", 4663, 2_300))).not.toContain(ALLOWLIST_NOTE);
+  });
+
+  it("summary warning mentions the allowlist, alone or after the size/risk warning", () => {
+    expect(poolRiskWarning({ tvlFiat: 500_000, tier: "green", isPrivate: true }, 200, 0.2)).toBe(
+      "⚠ Deposits restricted to an allowlist: you can only deposit if the curator has allowlisted your wallet.",
+    );
+    expect(poolRiskWarning({ tvlFiat: 2_300, tier: "red", isPrivate: true }, 200, 30)).toBe(
+      "⚠ Tiny High-Risk pool ($2.3k TVL): your $200 would be ~9% of it, so these estimates (≈3,000% APR) are unreliable. Deposits restricted to an allowlist: you can only deposit if the curator has allowlisted your wallet.",
+    );
   });
 });
