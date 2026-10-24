@@ -4,6 +4,13 @@ One entry per task, newest first. Each entry lists what changed, what couldn't b
 
 ## Entries
 
+### 2026-10-24 · `e93e3a1` · "No trades today" badge
+- **Changed:**
+  - The 24h-only badge is renamed from "No trades" to "No trades today", and its tooltip says the pool did trade earlier this week. "No trades 7d" is unchanged and still shows when the 7d fee APR is also 0 or missing.
+  - Applies to the pool picker and Top pools. Tests and README updated.
+- **Couldn't test:** Not checked on screen; the badge text comes from the single `tradeBadge` rule, covered by the updated tests. The owner's live check confirmed all 729 real pools include `analytics24h`, so the missing-data case from the previous entry doesn't occur.
+- **Review:** Nothing
+
 ### 2026-10-23 · `6725bec` · "No trades" warnings everywhere
 - **Changed:**
   - Shared badge rule in `src/lib/activity.ts`: 24h volume 0 (or missing) → "No trades"; if the 7d fee APR is 0 or missing too → "No trades 7d".
