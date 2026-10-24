@@ -10,10 +10,10 @@ describe("No trades badge rule", () => {
     expect(tradeBadge(1, null)).toBeNull();
     expect(tradeBadge(0.01, 1200)).toBeNull();
   });
-  it('"No trades" when 24h volume is 0 (or missing) but the 7d fee APR is positive', () => {
-    expect(tradeBadge(0, 1200)).toBe("No trades");
-    expect(tradeBadge(null, 0.4)).toBe("No trades");
-    expect(tradeBadge(undefined, 5)).toBe("No trades");
+  it('"No trades today" when 24h volume is 0 (or missing) but the 7d fee APR is positive', () => {
+    expect(tradeBadge(0, 1200)).toBe("No trades today");
+    expect(tradeBadge(null, 0.4)).toBe("No trades today");
+    expect(tradeBadge(undefined, 5)).toBe("No trades today");
   });
   it('"No trades 7d" when the 7d fee APR is 0 or missing too (TEST/WETH)', () => {
     expect(tradeBadge(0, 0)).toBe("No trades 7d");
