@@ -80,7 +80,7 @@ export function TierBadge({ tier, isPrivate }: { tier: Tier; isPrivate: boolean 
   const key = isPrivate ? "private" : tier;
   return (
     <span
-      title={isPrivate ? "Deposits are whitelisted" : `Metric tier: ${tier}`}
+      title={isPrivate ? "Deposits restricted to an allowlist" : `Metric tier: ${tier}`}
       className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-medium ${TIER_STYLE[key]}`}
     >
       <span className="h-1.5 w-1.5 rounded-full bg-current" />

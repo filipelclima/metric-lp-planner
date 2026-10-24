@@ -13,7 +13,8 @@ Think *Poolfish (uniswap.fish) for Metric*.
   - APR period 24h (`analytics24h.aprBps`) or **7d** (`aprBps7d`); TVL filter Any / **≥$10k** / ≥$100k / ≥$1M; chain filter.
   - Search combines with the filters; the list says "Showing X of Y pools".
   - **Inactive pools** (no 7d volume and TVL < $10k) are hidden unless "Show inactive pools" is on. `/metadata` has no 7d volume, so "no 7d volume" = 7d fee APR 0/missing and no 24h volume.
-  - Remembered in the page URL (`psort`, `pdir`, `papr`, `ptvl`, `pchain`, `pinactive`; only non-defaults, never in share links) and in localStorage. A URL with picker params wins over storage.
+  - **Private (deposit-allowlisted) pools** are hidden by default ("Hide private pools", on). When shown, they rank after open pools in every sort; their "Private" badge's tooltip says "Deposits restricted to an allowlist".
+  - Remembered in the page URL (`psort`, `pdir`, `papr`, `ptvl`, `pchain`, `pinactive`, `pprivate=1` to show private pools; only non-defaults, never in share links) and in localStorage. A URL with picker params wins over storage.
 - **"No trades" warnings** wherever a pool without trading can appear. The badge rule is in `src/lib/activity.ts`: 24h volume 0 → "No trades today" (it may have traded earlier this week); 7d fee APR 0/missing too → "No trades 7d".
   - Badges on rows in the pool picker and Top pools; Top pools' highlight cards skip these pools.
   - Compare replaces a no-trade column with a warning card ("Use 30d data" if 30d has volume, "Change pool") and leaves it out of highlights, verdicts, the APR chart and the share card.

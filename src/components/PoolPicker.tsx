@@ -117,14 +117,18 @@ export default function PoolPicker({ list, selected, onSelect, hasSelection, pic
               <input type="checkbox" checked={prefs.showInactive} onChange={(e) => setPrefs({ ...prefs, showInactive: e.target.checked })} className="accent-[var(--accent)]" />
               Show inactive pools
             </label>
+            <label className="flex items-center gap-1.5 text-[11px] text-muted" title="Private pools only accept deposits from allowlisted wallets.">
+              <input type="checkbox" checked={prefs.hidePrivate} onChange={(e) => setPrefs({ ...prefs, hidePrivate: e.target.checked })} className="accent-[var(--accent)]" />
+              Hide private pools
+            </label>
           </div>
           {!list.loading && total > 0 && (
             <p className="mt-2 text-[11px] text-faint">
               Showing {pools.length} of {total} pools
-              {pools.length < total && (prefs.minTvl > 0 || !prefs.showInactive) && (
+              {pools.length < total && (prefs.minTvl > 0 || !prefs.showInactive || prefs.hidePrivate) && (
                 <>
                   {" · "}
-                  <button type="button" className="text-accent hover:underline" onClick={() => setPrefs({ ...prefs, minTvl: 0, showInactive: true })}>
+                  <button type="button" className="text-accent hover:underline" onClick={() => setPrefs({ ...prefs, minTvl: 0, showInactive: true, hidePrivate: false })}>
                     show all
                   </button>
                 </>

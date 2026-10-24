@@ -78,14 +78,14 @@ describe("pool picker sorting & filters", () => {
 });
 
 describe("pool picker persistence", () => {
-  const custom: PickerPrefs = { sort: "apr", dir: "asc", period: "24h", minTvl: 1e6, chain: 56, showInactive: true };
+  const custom: PickerPrefs = { sort: "apr", dir: "asc", period: "24h", minTvl: 1e6, chain: 56, showInactive: true, hidePrivate: false };
 
   it("URL round trip; defaults write nothing", () => {
     expect(pickerParams(DEFAULT_PREFS).toString()).toBe("");
     const q = pickerParams(custom);
-    expect(q.toString()).toBe("psort=apr&pdir=asc&papr=24h&ptvl=1m&pchain=56&pinactive=1");
+    expect(q.toString()).toBe("psort=apr&pdir=asc&papr=24h&ptvl=1m&pchain=56&pinactive=1&pprivate=1");
     expect(readPickerPrefs(q, null)).toEqual(custom);
-    expect(withPickerParams("chain=56&amount=1", custom)).toBe("chain=56&amount=1&psort=apr&pdir=asc&papr=24h&ptvl=1m&pchain=56&pinactive=1");
+    expect(withPickerParams("chain=56&amount=1", custom)).toBe("chain=56&amount=1&psort=apr&pdir=asc&papr=24h&ptvl=1m&pchain=56&pinactive=1&pprivate=1");
     expect(withPickerParams("chain=56", DEFAULT_PREFS)).toBe("chain=56");
   });
 
@@ -128,5 +128,38 @@ describe("inactive pools", () => {
   it("the toggle round-trips through the URL", () => {
     expect(readPickerPrefs(new URLSearchParams("pinactive=1"), null).showInactive).toBe(true);
     expect(readPickerPrefs(new URLSearchParams("pinactive=yes"), null).showInactive).toBe(false);
+  });
+});
+
+describe("private (deposit-allowlisted) pools in the picker", () => {
+  const priv = (n: number, pair: string, tvl: number, apr: number) => ({ ...pool(n, pair, 56, tvl, apr, apr), isPrivate: true }) as Pool;
+  const P1 = priv(20, "PRV/USDT", 9_000_000, 90_000);
+  const P2 = priv(21, "PRW/USDT", 20_000, 100);
+  const list = [P1, ...POOLS, P2];
+  const show: PickerPrefs = { ...DEFAULT_PREFS, minTvl: 0, hidePrivate: false };
+  const names = (p: PickerPrefs) => filterSortPools(list, p).pools.map((x) => x.pair.slice(0, 3));
+
+  it("hidden by default, and the toggle is on by default", () => {
+    expect(DEFAULT_PREFS.hidePrivate).toBe(true);
+    expect(names({ ...DEFAULT_PREFS, minTvl: 0 })).not.toContain("PRV");
+  });
+
+  it("when shown, they rank after open pools in every sort and direction", () => {
+    for (const sort of ["pair", "chain", "tvl", "apr"] as const)
+      for (const dir of ["asc", "desc"] as const) {
+        const out = names({ ...show, sort, dir });
+        expect(out.slice(-2).sort()).toEqual(["PRV", "PRW"]);
+      }
+    // …and keep their own order among themselves (TVL high → low here)
+    expect(names({ ...show, sort: "tvl", dir: "desc" }).slice(-2)).toEqual(["PRV", "PRW"]);
+    expect(names({ ...show, sort: "tvl", dir: "asc" }).slice(-2)).toEqual(["PRW", "PRV"]);
+  });
+
+  it("the toggle is remembered in the URL and storage", () => {
+    expect(pickerParams(show).get("pprivate")).toBe("1");
+    expect(pickerParams(DEFAULT_PREFS).has("pprivate")).toBe(false);
+    expect(readPickerPrefs(new URLSearchParams("pprivate=1"), null).hidePrivate).toBe(false);
+    expect(readPickerPrefs(new URLSearchParams(""), serializePrefs(show)).hidePrivate).toBe(false);
+    expect(readPickerPrefs(new URLSearchParams(""), null).hidePrivate).toBe(true);
   });
 });
