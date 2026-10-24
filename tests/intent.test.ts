@@ -1,5 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { binsAround, matchPool, parseIntent, parseNumber, parseText, understoodAnything, type ParsedIntent } from "@/lib/intent";
+import { parseBins } from "@/lib/calc";
+import {
+  ambiguityTitle,
+  binsAround,
+  compactUsd,
+  distinctRange,
+  matchPool,
+  parseIntent,
+  parseNumber,
+  parseText,
+  poolChipLabel,
+  poolRiskWarning,
+  shortAddress,
+  understoodAnything,
+  type ParsedIntent,
+} from "@/lib/intent";
+import { sharePreset, widerRange } from "@/lib/rangeInputs";
 import type { Pool } from "@/lib/types";
 
 /** Synthetic pools (fake addresses). */
@@ -243,5 +259,97 @@ describe("garbage and the interface", () => {
     expect(r.match).toMatchObject({ kind: "one", pool: AI_RH });
     const custom = await parseIntent("anything", POOLS, () => ({ intent: { amount: 1, notes: [], unknown: [] }, match: { kind: "none" } }));
     expect(custom.intent.amount).toBe(1);
+  });
+});
+
+describe("fix: ambiguity wording and chips", () => {
+  const a = { ...pool("AI/USDG", 4663, 2_300), poolAddress: "0xA9000000000000000000000000000000000000071", verifiedAdmin: false, adminUsername: null, tier: "red", analytics24h: { volumeFiat: 12_000 } } as unknown as Pool;
+  const b = { ...pool("AI/USDG", 4663, 3_100), poolAddress: "0xB4000000000000000000000000000000000000c2", verifiedAdmin: true, adminUsername: "metricdao", tier: "green", analytics24h: { volumeFiat: 800 } } as unknown as Pool;
+
+  it("same chain → 'That pair has 2 pools on Robinhood'", () => {
+    expect(ambiguityTitle([a, b])).toBe("That pair has 2 pools on Robinhood. Which one?");
+  });
+  it("different chains keep the chain wording", () => {
+    expect(ambiguityTitle([SK_BNB, SK_RH])).toBe("That pair is on 2 chains (BNB, Robinhood). Which pool?");
+  });
+  it("chips tell same-pair pools apart: TVL, 24h volume, curator, short address", () => {
+    expect(shortAddress("0xA9000000000000000000000000000000000000071")).toBe("0xA9…71");
+    expect(poolChipLabel(a)).toBe("AI/USDG · RH · TVL $2.3k · vol $12k · Unverified · 0xA9…71");
+    expect(poolChipLabel(b)).toBe("AI/USDG · RH · TVL $3.1k · vol $800 · metricdao ✓ · 0xB4…c2");
+  });
+  it("two small same-chain pools → the user chooses (nothing ≥ $10k to prefer)", () => {
+    const m = matchPool(parseText("AI/USDG", new Set(["AI", "USDG"])), [a, b]);
+    expect(m.kind).toBe("choose");
+  });
+});
+
+describe("fix: small / risky pools", () => {
+  it("compact USD", () => {
+    expect([800, 2_300, 3_100, 10_000, 12_000, 50_000, 1_200_000].map(compactUsd)).toEqual(["$800", "$2.3k", "$3.1k", "$10k", "$12k", "$50k", "$1.2M"]);
+  });
+  it("tiny High-Risk pool (the example)", () => {
+    expect(poolRiskWarning({ tvlFiat: 2_300, tier: "red" }, 200, 30)).toBe(
+      "⚠ Tiny High-Risk pool ($2.3k TVL): your $200 would be ~9% of it, so these estimates (≈3,000% APR) are unreliable.",
+    );
+  });
+  it("deposit > 10% of TVL on an otherwise fine pool", () => {
+    expect(poolRiskWarning({ tvlFiat: 50_000, tier: "green" }, 10_000, 0.4)).toBe(
+      "⚠ Small pool ($50k TVL): your $10k would be ~20% of it, so these estimates (≈40% APR) are unreliable.",
+    );
+  });
+  it("High Risk tier on a big pool", () => {
+    expect(poolRiskWarning({ tvlFiat: 1_200_000, tier: "red" }, 1_000, 0.6)).toBe("⚠ High-Risk pool ($1.2M TVL): Metric rates it High Risk, so these estimates (≈60% APR) may not hold.");
+  });
+  it("no warning for a normal deposit on a normal pool; exactly 10% doesn't warn", () => {
+    expect(poolRiskWarning({ tvlFiat: 500_000, tier: "yellow" }, 1_000, 0.2)).toBeNull();
+    expect(poolRiskWarning({ tvlFiat: 100_000, tier: "green" }, 10_000, 0.2)).toBeNull();
+  });
+  it("matching prefers pools ≥ $10k TVL, and falls back to small ones only if nothing else matches", () => {
+    const tiny = pool("ZED/USDT", 56, 3_000);
+    const big = pool("ZED/USDT", 4663, 20_000);
+    const tiny2 = pool("ZED/USDT", 1, 8_000);
+    // 20k vs 3k + 8k: without the preference, 20k is 65% of the TVL → the user would be asked
+    expect(matchPool(parseText("ZED/USDT", new Set(["ZED", "USDT"])), [tiny, big, tiny2])).toMatchObject({ kind: "one", pool: big });
+    // only small pools: fall back to them (8k is 73% of 11k, under the 80% bar → ask)
+    expect(matchPool(parseText("ZED/USDT", new Set(["ZED", "USDT"])), [tiny, tiny2]).kind).toBe("choose");
+    expect(matchPool(parseText("ZED/USDT", new Set(["ZED", "USDT"])), [tiny2])).toMatchObject({ kind: "one", pool: tiny2 });
+  });
+});
+
+describe("fix: range words stay distinct on concentrated pools", () => {
+  /** bins -5..5, price at 0, volume per bin from `vol`. */
+  const bins = (vol: number[]) =>
+    parseBins({
+      window: { fromTs: 0, toTs: 7 * 86400 },
+      curBinIdx: 0,
+      bins: vol.map((v, i) => ({
+        bin: String(i - 5), swapCount: "1", lengthE6: 100,
+        token0: { volumeFiat: v / 2, lpFeesFiat: v / 2000, avgLiquidityFiat: 500, reserveFiat: i >= 5 ? 1000 : 0 },
+        token1: { volumeFiat: v / 2, lpFeesFiat: v / 2000, avgLiquidityFiat: 500, reserveFiat: i <= 5 ? 1000 : 0 },
+        aprBps: 100, pnlAprBps: 50,
+      })),
+    });
+  const allSame = bins([0, 0, 1, 40, 16, 40, 1, 1, 1, 0, 0]); // 3 bins hold 96%: 80/90/95% all = #-2…#0
+  const wideIsMedium = bins([0, 0, 0, 10, 1500, 8000, 480, 5, 5, 0, 0]); // 90% = 95% = #-1…#0, 80% = #0…#0
+  const spread = bins([1, 2, 4, 8, 15, 40, 15, 8, 4, 2, 1]);
+
+  it("'wide' equal to 'medium' → the Wider preset, flagged as widened", () => {
+    expect(sharePreset(wideIsMedium, 95)).toEqual(sharePreset(wideIsMedium, 90));
+    expect(distinctRange("wide", wideIsMedium)).toEqual({ range: { kind: "manual", ...widerRange(wideIsMedium) }, widened: true });
+    expect(distinctRange("medium", wideIsMedium)).toEqual({ range: { kind: "preset", share: 90 }, widened: false }); // 90% ≠ 80% here
+  });
+  it("'medium' equal to 'narrow' → narrow ± 1 bin", () => {
+    expect(distinctRange("medium", allSame)).toEqual({ range: { kind: "manual", from: -3, to: 1 }, widened: true });
+    expect(distinctRange("narrow", allSame)).toEqual({ range: { kind: "preset", share: 80 }, widened: false });
+  });
+  it("all three distinct on a concentrated pool", () => {
+    const r = (["narrow", "medium", "wide"] as const).map((w) => {
+      const x = distinctRange(w, allSame).range;
+      return x.kind === "manual" ? `${x.from}:${x.to}` : `${sharePreset(allSame, x.share).from}:${sharePreset(allSame, x.share).to}`;
+    });
+    expect(new Set(r).size).toBe(3);
+  });
+  it("normal pools keep the plain presets", () => {
+    for (const w of ["narrow", "medium", "wide"] as const) expect(distinctRange(w, spread).widened).toBe(false);
   });
 });

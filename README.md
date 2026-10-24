@@ -77,6 +77,10 @@ A text box at the top of the planner: type e.g. "Deposit $200 on AI/USDG with a 
   - Unknown pair → "Couldn't find … Did you mean" with the 3 closest.
   - No amount → keeps the current deposit and says so.
   - A lone number is used as the deposit, and the summary says so.
+- **Ambiguity chips** tell same-pair pools apart: tier badge, chain, TVL, 24h volume, curator (name ✓ or "Unverified") and a short address. The message says "That pair has 2 pools on Robinhood" when they share a chain.
+- **Matching prefers pools with TVL ≥ $10k** (the picker's default) and falls back to smaller ones only when nothing else matches.
+- **Range words stay distinct** on concentrated pools: "wide" that equals "medium" becomes the Wider preset; "medium" that equals "narrow" becomes narrow ± 1 bin. The summary says "(widened, pool is concentrated)".
+- **Risk warning** (amber, in the summary) when the deposit is > 10% of the pool's TVL, TVL < $10k, or the tier is High Risk / delisted, e.g. "⚠ Tiny High-Risk pool ($2.3k TVL): your $200 would be ~9% of it, so these estimates (≈3,000% APR) are unreliable."
 - After filling, a one-line summary is computed live from the planner: range, tokens needed with USD values, est. fees. **Undo** restores the previous form.
 - `src/lib/intent.ts`: `parseText` → `matchPool` → `parseIntent(text, pools)` behind an `IntentParser` interface, so a fallback parser could be added later without UI changes. No AI is used today.
 

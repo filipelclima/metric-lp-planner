@@ -10,7 +10,10 @@
  *
  * Keywords: English, Portuguese, Spanish, French, Turkish, Chinese, Vietnamese, Russian.
  */
-import type { Period, Pool, Strategy } from "./types";
+import { fmtUsd, type BinData } from "./calc";
+import { sharePreset, widerRange } from "./rangeInputs";
+import { TIER_LABEL } from "./risk";
+import { CHAINS, type Period, type Pool, type Strategy } from "./types";
 
 export type RangeWord = "narrow" | "medium" | "wide" | "wider";
 
@@ -335,6 +338,10 @@ export type PoolMatch =
 /** Largest pool wins outright when it holds more than this share of the candidates' combined TVL. */
 export const DOMINANT_TVL_SHARE = 0.8;
 
+/** Same bar as the pool picker's default view: pools under $10k TVL are only used when nothing else matches. */
+export const MIN_ELIGIBLE_TVL = 1e4;
+export const isEligiblePool = (p: Pool) => p.tvlFiat >= MIN_ELIGIBLE_TVL;
+
 function pairScore(p: Pool, q: string[]): number {
   const s0 = p.token0.symbol;
   const s1 = p.token1.symbol;
@@ -365,7 +372,10 @@ export function matchPool(intent: ParsedIntent, pools: Pool[]): PoolMatch {
     return { kind: "notFound", query: want, suggestions };
   }
   const best = Math.min(...pool.map((x) => x.d));
-  const cands = pool.filter((x) => x.d === best).map((x) => x.p).sort(byTvl);
+  const all = pool.filter((x) => x.d === best).map((x) => x.p).sort(byTvl);
+  // Prefer pools that pass the picker's default filters (TVL ≥ $10k); fall back to small ones only if that's all there is.
+  const eligible = all.filter(isEligiblePool);
+  const cands = eligible.length ? eligible : all;
   const chainNote = intent.chain !== undefined && !onChain.length ? " (not on the chain you named)" : "";
   if (cands.length === 1) return { kind: "one", pool: cands[0], alternatives: [], note: chainNote ? `Found it on another chain${chainNote}.` : undefined };
   if (q.length === 1)
@@ -405,3 +415,80 @@ export function binsAround(pct: number, widthPct: number): { from: number; to: n
 }
 
 export const RANGE_PRESET: Record<Exclude<RangeWord, "wider">, 80 | 90 | 95> = { narrow: 80, medium: 90, wide: 95 };
+
+// ---------- ambiguity chips ----------
+
+const chainName = (id: number) => (CHAINS[id]?.name ?? String(id)).replace(/ Chain$/, "");
+/** "$800", "$2.3k", "$12k", "$1.2M" (one decimal under 10 of a unit, trailing ".0" dropped). */
+export function compactUsd(v: number): string {
+  if (!Number.isFinite(v)) return "—";
+  const a = Math.abs(v);
+  const unit = (x: number, u: string) => `$${(x < 10 ? x.toFixed(1) : Math.round(x).toString()).replace(/\.0$/, "")}${u}`;
+  if (a >= 1e9) return unit(v / 1e9, "B");
+  if (a >= 1e6) return unit(v / 1e6, "M");
+  if (a >= 1e3) return unit(v / 1e3, "k");
+  return fmtUsd(Math.round(v)).replace(/\.00$/, "");
+}
+
+/** "That pair has 2 pools on Robinhood" when they share a chain; the chain wording only when they differ. */
+export function ambiguityTitle(options: Pool[]): string {
+  const chains = [...new Set(options.map((p) => p.chainId))];
+  if (chains.length === 1) return `That pair has ${options.length} pools on ${chainName(chains[0])}. Which one?`;
+  return `That pair is on ${chains.length} chains (${chains.map(chainName).join(", ")}). Which pool?`;
+}
+
+/** "0xA9…71" */
+export const shortAddress = (a: string) => `${a.slice(0, 4)}…${a.slice(-2)}`;
+
+/** Chip text that tells same-pair pools apart: "AI/USDG · RH · TVL $2.3k · vol $12k · Unverified · 0xA9…71". */
+export function poolChipLabel(p: Pool): string {
+  const vol = p.analytics24h ? `vol ${compactUsd(p.analytics24h.volumeFiat)}` : "vol —";
+  const curator = p.verifiedAdmin ? `${p.adminUsername ?? "curator"} ✓` : "Unverified";
+  return [p.pair, CHAINS[p.chainId]?.short ?? String(p.chainId), `TVL ${compactUsd(p.tvlFiat)}`, vol, curator, shortAddress(p.poolAddress)].join(" · ");
+}
+
+// ---------- small / risky pool warning ----------
+
+/** Deposit above this share of the pool's TVL makes the estimate unreliable (you'd move the pool). */
+export const BIG_SHARE = 0.1;
+const HIGH_RISK = new Set(["red", "black"]);
+
+/**
+ * Amber warning for the summary when the estimate can't be trusted: deposit > 10% of TVL, TVL < $10k, or a
+ * High-Risk (or delisted) tier. e.g. "⚠ Tiny High-Risk pool ($2.3k TVL): your $200 would be ~9% of it, so these
+ * estimates (≈3,000% APR) are unreliable." null when none applies.
+ */
+export function poolRiskWarning(p: Pick<Pool, "tvlFiat" | "tier">, deposit: number, feeApr: number | null): string | null {
+  const share = p.tvlFiat > 0 ? deposit / p.tvlFiat : Infinity;
+  const tiny = p.tvlFiat < MIN_ELIGIBLE_TVL;
+  const big = share > BIG_SHARE;
+  const risky = HIGH_RISK.has(p.tier);
+  if (!tiny && !big && !risky) return null;
+  const size = tiny ? "Tiny" : big ? "Small" : "";
+  const tierWord = risky ? (p.tier === "black" ? "Delisted" : "High-Risk") : "";
+  const what = [size, tierWord].filter(Boolean).join(" ");
+  const apr = feeApr !== null && Number.isFinite(feeApr) ? ` (≈${Math.round(feeApr * 100).toLocaleString("en-US")}% APR)` : "";
+  const shareText = !Number.isFinite(share) ? "the whole pool" : share >= 0.995 ? `${Math.round(share)}× its size` : `~${Math.max(1, Math.round(share * 100))}% of it`;
+  const why = tiny || big ? `your ${compactUsd(deposit)} would be ${shareText}, so these estimates${apr} are unreliable` : `Metric rates it ${TIER_LABEL[p.tier]}, so these estimates${apr} may not hold`;
+  return `⚠ ${what} pool (${compactUsd(p.tvlFiat)} TVL): ${why}.`;
+}
+
+// ---------- distinct range words ----------
+
+/**
+ * A range word resolved on this pool's bins, kept distinct from the next narrower word on concentrated pools:
+ * "wide" equal to "medium" → the Wider preset; "medium" equal to "narrow" → narrow ± 1 bin. `widened` is
+ * true when that happened (the summary says "widened, pool is concentrated").
+ */
+export function distinctRange(
+  word: Exclude<RangeWord, "wider">,
+  data: BinData,
+): { range: { kind: "preset"; share: 80 | 90 | 95 } | { kind: "manual"; from: number; to: number }; widened: boolean } {
+  const same = (a: { from: number; to: number }, b: { from: number; to: number }) => a.from === b.from && a.to === b.to;
+  if (word === "wide" && same(sharePreset(data, 95), sharePreset(data, 90))) return { range: { kind: "manual", ...widerRange(data) }, widened: true };
+  if (word === "medium") {
+    const narrow = sharePreset(data, 80);
+    if (same(sharePreset(data, 90), narrow)) return { range: { kind: "manual", from: narrow.from - 1, to: narrow.to + 1 }, widened: true };
+  }
+  return { range: { kind: "preset", share: RANGE_PRESET[word] }, widened: false };
+}

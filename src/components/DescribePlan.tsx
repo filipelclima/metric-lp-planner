@@ -2,24 +2,34 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fmtUsd, projectFees, type BinData } from "@/lib/calc";
-import { RANGE_PRESET, binsAround, parseIntent, understoodAnything, type ParsedIntent } from "@/lib/intent";
+import {
+  RANGE_PRESET,
+  ambiguityTitle,
+  binsAround,
+  distinctRange,
+  parseIntent,
+  poolChipLabel,
+  poolRiskWarning,
+  understoodAnything,
+  type ParsedIntent,
+  type RangeWord,
+} from "@/lib/intent";
 import { activePreset, tokenNeeds, widerRange } from "@/lib/rangeInputs";
 import { CHAINS, type Pool } from "@/lib/types";
 import type { PlannerModel } from "@/lib/usePlanner";
 import type { PlannerState } from "@/lib/urlState";
-import { InfoTip, inputCls } from "./ui";
+import { InfoTip, TierBadge, inputCls } from "./ui";
 
 type Outcome =
-  | { kind: "applied"; prev: PlannerState; notes: string[] }
+  | { kind: "applied"; prev: PlannerState; notes: string[]; word?: RangeWord; widened?: boolean }
   | { kind: "choose"; intent: ParsedIntent; options: Pool[] }
   | { kind: "notFound"; intent: ParsedIntent; query: string; suggestions: Pool[] }
   | { kind: "nothing"; unknown: string[] };
 
 /** A range that needs the (new) pool's bins before it can be turned into bin numbers. */
-type Pending = { kind: "wider" } | { kind: "around"; pct: number };
+type Pending = { kind: "wider" } | { kind: "around"; pct: number } | { kind: "word"; word: Exclude<RangeWord, "wider"> };
 
 const RANGE_LABEL: Record<string, string> = { "80": "narrow", "90": "medium", "95": "wide", wider: "wider", manual: "custom" };
-const poolLabel = (p: Pool) => `${p.pair} · ${CHAINS[p.chainId]?.short ?? p.chainId} · TVL ${fmtUsd(p.tvlFiat, { compact: true }).replace(".00", "")}`;
 const binWidthPct = (d: BinData) => d.defaultLengthE6 / 1e4;
 
 /**
@@ -40,9 +50,21 @@ export default function DescribePlan({ m }: { m: PlannerModel }) {
       sawLoading.current = true;
       return;
     }
-    if (!sawLoading.current || !m.binData) return;
+    if (!sawLoading.current) return;
+    if (!m.binData) {
+      // Bins failed to load: keep the placeholder preset rather than waiting forever.
+      setPending(null);
+      sawLoading.current = false;
+      return;
+    }
     const d = m.binData;
-    m.set({ range: { kind: "manual", ...(pending.kind === "wider" ? widerRange(d) : binsAround(pending.pct, binWidthPct(d))) } });
+    if (pending.kind === "word") {
+      const r = distinctRange(pending.word, d);
+      if (r.widened) {
+        m.set({ range: r.range });
+        setOutcome((o) => (o?.kind === "applied" ? { ...o, widened: true } : o));
+      }
+    } else m.set({ range: { kind: "manual", ...(pending.kind === "wider" ? widerRange(d) : binsAround(pending.pct, binWidthPct(d))) } });
     setPending(null);
     sawLoading.current = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -64,8 +86,19 @@ export default function DescribePlan({ m }: { m: PlannerModel }) {
     // Range: explicit bins > preset words > Wider / ±x% (need bin data) > keep (or 90% for a new pool).
     const sameData = !poolChanged && (!intent.period || intent.period === prev.period) && !!m.binData && !m.bins.loading;
     let wait: Pending | null = null;
+    let widened = false;
     if (intent.bins) patch.range = { kind: "manual", ...intent.bins };
-    else if (intent.range && intent.range !== "wider") patch.range = { kind: "preset", share: RANGE_PRESET[intent.range] };
+    else if (intent.range && intent.range !== "wider") {
+      // Kept distinct from the next narrower word on concentrated pools (needs this pool's bins).
+      if (sameData) {
+        const r = distinctRange(intent.range, m.binData!);
+        patch.range = r.range;
+        widened = r.widened;
+      } else {
+        patch.range = { kind: "preset", share: RANGE_PRESET[intent.range] };
+        if (intent.range !== "narrow") wait = { kind: "word", word: intent.range };
+      }
+    }
     else if (intent.range === "wider") {
       if (sameData) patch.range = { kind: "manual", ...widerRange(m.binData!) };
       else wait = { kind: "wider" };
@@ -78,7 +111,7 @@ export default function DescribePlan({ m }: { m: PlannerModel }) {
     sawLoading.current = false;
     setPending(wait);
     m.set(patch);
-    setOutcome({ kind: "applied", prev, notes });
+    setOutcome({ kind: "applied", prev, notes, word: intent.range, widened });
   };
 
   const submit = async (value = text) => {
@@ -161,9 +194,9 @@ export default function DescribePlan({ m }: { m: PlannerModel }) {
       <AnimatePresence initial={false}>
         {outcome && (
           <motion.div key={outcome.kind} initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mt-3 text-sm" role="status">
-            {outcome.kind === "applied" && <Summary m={m} notes={outcome.notes} pending={!!pending} onUndo={undo} />}
+            {outcome.kind === "applied" && <Summary m={m} notes={outcome.notes} word={outcome.word} widened={!!outcome.widened} pending={!!pending} onUndo={undo} />}
             {outcome.kind === "choose" && (
-              <Choices title="That pair is on more than one chain. Which pool?" pools={outcome.options} onPick={(p) => apply(outcome.intent, p)} />
+              <Choices title={ambiguityTitle(outcome.options)} pools={outcome.options} onPick={(p) => apply(outcome.intent, p)} />
             )}
             {outcome.kind === "notFound" && (
               <Choices
@@ -194,9 +227,10 @@ function Choices({ title, pools, onPick }: { title: string; pools: Pool[]; onPic
             key={`${p.chainId}:${p.poolAddress}`}
             type="button"
             onClick={() => onPick(p)}
-            className="num rounded-full bg-surface-2 px-3 py-1 text-xs text-text ring-1 ring-line transition hover:ring-accent/50"
+            className="num inline-flex max-w-full items-center gap-2 truncate rounded-full bg-surface-2 px-3 py-1 text-xs text-text ring-1 ring-line transition hover:ring-accent/50"
           >
-            {poolLabel(p)}
+            <TierBadge tier={p.tier} isPrivate={p.isPrivate} />
+            <span>{poolChipLabel(p)}</span>
           </button>
         ))}
       </div>
@@ -205,14 +239,29 @@ function Choices({ title, pools, onPick }: { title: string; pools: Pool[]; onPic
 }
 
 /** "Done: $200 on AI/USDG (RH) · medium range #-3 → #1 · 60 days. You'll need ≈ … · est. fees $12.30", live from the planner. */
-function Summary({ m, notes, pending, onUndo }: { m: PlannerModel; notes: string[]; pending: boolean; onUndo: () => void }) {
+function Summary({
+  m,
+  notes,
+  word,
+  widened,
+  pending,
+  onUndo,
+}: {
+  m: PlannerModel;
+  notes: string[];
+  word?: RangeWord;
+  widened: boolean;
+  pending: boolean;
+  onUndo: () => void;
+}) {
   const { s, pool, range, estimate, binData } = m;
   // Wait for the pool and its bins; if bins fail, finish with what the planner has (pool-level estimate or none).
   const ready = !!pool && !pending && !m.bins.loading && !m.meta.loading;
   let line = "Filling the planner…";
+  let warning: string | null = null;
   if (ready) {
-    const label = RANGE_LABEL[String(activePreset(s.range, binData))];
-    const rangeText = range ? `${label} range #${range.from} → #${range.to}` : `${label} range (no per-bin data)`;
+    const label = widened && word ? word : RANGE_LABEL[String(activePreset(s.range, binData))];
+    const rangeText = range ? `${label} range #${range.from} → #${range.to}${widened ? " (widened, pool is concentrated)" : ""}` : `${label} range (no per-bin data)`;
     let tail = "No estimate for this pool right now.";
     if (estimate) {
       const needs = tokenNeeds(estimate, pool.token0, pool.token1)
@@ -221,6 +270,7 @@ function Summary({ m, notes, pending, onUndo }: { m: PlannerModel; notes: string
       const fees = projectFees(estimate.dailyFees, estimate.deposit, s.days).simple;
       tail = `${needs ? `You'll need ≈ ${needs} · ` : ""}est. fees ${fmtUsd(fees)}`;
     }
+    warning = poolRiskWarning(pool, s.amount, estimate?.apr ?? null);
     line = `Done: ${fmtUsd(s.amount)} on ${pool.pair} (${CHAINS[pool.chainId]?.short ?? pool.chainId}) · ${rangeText} · ${s.days} days. ${tail}`;
   }
   return (
@@ -231,6 +281,7 @@ function Summary({ m, notes, pending, onUndo }: { m: PlannerModel; notes: string
           Undo
         </button>
       </div>
+      {warning && <p className="mt-1 text-[12px] font-medium text-warn">{warning}</p>}
       {notes.length > 0 && (
         <ul className="mt-1 space-y-0.5 text-[12px] text-muted">
           {notes.map((n) => (
