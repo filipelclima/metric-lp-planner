@@ -4,6 +4,29 @@ One entry per task, newest first. Each entry lists what changed, what couldn't b
 
 ## Entries
 
+### 2026-10-24 · `c2b3fcf` · UI review fixes (live data)
+- **Changed:**
+  - **⌘K palette.** Cause: an exact symbol match ("NVDA") outscored a prefix match ("NVDAB"), so several Robinhood NVDA pools, including $0 ones, filled all 8 slots.
+    - Matching is now coarse tiers: exact pair or address > symbol starts with the query > substring > chain. TVL decides within a tier, and private pools come after open ones.
+    - $0-TVL pools only appear when nothing with TVL matches.
+    - 10 results. It always searches the full list on all chains; the picker's filters never applied to it.
+  - **Histogram zoom.** On live pools, far-out bins hold dust liquidity, which counted as "> 0" and stretched the window to −50…25. A bin now counts only with ≥ 1% of the largest bin's liquidity or volume (± 2 padding). "Show all bins" still shows the full span.
+  - **Tooltips.** The histogram tooltip is forced hidden when no bin is hovered, and the hover clears on pointer leave or touch end. The ruler tooltip clears on touch end and cancel.
+  - **You'll need.** A note when the range is entirely above the active bin (funded only with token0) or below it (only token1), e.g. "Your range is entirely above the current price (active #-9), so it's funded only with SKHYB. It earns once price moves into it."
+  - **Landing "Safest".** Now requires net APR ≥ 0. If no Best Practices pool qualifies, it shows the largest one titled "Largest Best-Practices pool".
+  - 4 new tests (251 total).
+- **Couldn't test:** Live data (Metric is blocked in the sandbox). Verified against the mock:
+  - palette "nvda" → NVDAB/USDT;
+  - above/below notes;
+  - histogram tooltip visible on hover, hidden after leaving and after a tap;
+  - the Safest title.
+
+  The dust case is covered by a unit test (bins −50…25 with $1 dust → zoom −3…3); the mock has no dust bins.
+- **Review:**
+  - The 1% dust threshold.
+  - "Safest" treats an unknown net APR as not qualifying.
+  - Within a palette match tier, private pools come before TVL ordering.
+
 ### 2026-10-24 · `7431095` · UI polish pass
 - **Changed:**
   - **Landing** (planner without a pool): replaces the empty panel.
