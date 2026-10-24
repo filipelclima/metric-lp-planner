@@ -4,6 +4,22 @@ One entry per task, newest first. Each entry lists what changed, what couldn't b
 
 ## Entries
 
+### 2026-10-24 · `565ddff` · Pool picker: private pools
+- **Changed:**
+  - New "Hide private pools" toggle, on by default and remembered like the other filters (`pprivate=1` in the URL when off, plus localStorage).
+  - When shown, private (deposit-allowlisted) pools rank after open ones in every sort and direction, keeping their own order among themselves.
+  - The "Private" badge's tooltip now reads "Deposits restricted to an allowlist", everywhere the badge is used.
+  - "show all" also turns private pools on. Planner and Compare.
+  - 3 new tests (232 total); the persistence test now includes the new param.
+- **Couldn't test:** Live data (Metric is blocked in the sandbox). Verified in the browser against the mock's private PRIV/USDT pool, on the planner and Compare:
+  - hidden by default;
+  - last when shown, under TVL, APR and Pair sorts;
+  - the tooltip;
+  - the toggle remembered after a reload.
+- **Review:**
+  - A pool that is already selected from the URL stays selected even when it's private and hidden from the list.
+  - Top pools keeps its own "Show all" behaviour for private pools.
+
 ### 2026-10-24 · `5f52089` · Describe your plan: private pools last
 - **Changed:**
   - Private (deposit-allowlisted) pools rank after every open match, even bigger ones. They're auto-picked only when every match is private.
